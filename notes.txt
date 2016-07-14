@@ -1,0 +1,99 @@
+Q: Is duration and acoustic model trained togetheer?
+A: I think so. See line 4 of pseudocode in Unidirectional paper
+
+Things to do / watch out for:
+- mean-variance
+- What's the deal with smoothing of F0 and other parameter trajectories?
+- Unvoiced frames
+	- Removing unvoiced frames (Unidirectional, )
+	- Modeling unvoiced frames as voiced frames by interpolating (SPSS Using DNN)
+
+Vocoder woes
+-  Vocaine, STRAIGHT, CLUSTERGEN (e speech is reconstructed from the predicted parametersusing the MLSA filter)
+
+----------------------------------------------------------------------------------------
+PAPERS
+----------------------------------------------------------------------------------------
+Unidirectional
+- Linguistic
+	- 291 linguistic contexts: phoneme identities, stress marks, number of syllables in a word, position of the current syllable in a phrase
+		- future 2 contexts 
+	- phoneme-level inlguistic features, 3 numerical features for coarse-coded position of the current frame in the current phoneme, and 1 numerical feature for duration of the current segment
+- Acoustic
+	- 40 mel-cepstral coefficients, log F0 values, 5-band aperiodicities (0-1, 1-2, 2-4, 4-6, 6-8 kHz) every 5ms.
+	- downsampled from 48 kHz to 16 kHz
+	- Read carefully: The recurrent output layer is a simple extension of the convention RNN; ... The recurrent connection at the output layer can be viewed as a trainable time-invariant smoother for output features. It encourages smoth transitions between consecutive frames.
+- Model
+	- DNN: 4 hiden-layer, 1024 units per layer, with ReLUs.
+	- LSTMs: 1 forward-directed hidden LSTM with 256 units
+	- Linear activation function wwas used in the output layer for the DNNs and LSTMs, i.e. phi(x) = x
+	- feed-forward architecture was used for the output layers of the duration LSTMs as output feature-level continuity is not required for durations
+	- weights of LSTMs initialized randomly
+	- weights of DNNs initialized using layer-wise back-propagation pre-training [33]
+	- AdaDec-based learning rate scheduling [34] and momentum term [35]
+	- Training took a half day (DNN) and day (LSTM)
+- Synthesis done using Vocaine vocoder 
+
+
+----------------------------------------------------------------------------------------
+Fast, Compact, and High Quality LSTM-RNN Based Statistical Parametric Speech Synthesizers for Mobile Devices
+- Linguistic
+	- 
+- Acoustic
+	- mel-cepstrum and 7-band aperiodicities, log F0 and voiced/unvoiced binary flag
+	- 22.05 kHz sampling rather than 16 kHz
+- Model
+	- 1 x 128-unit ReLU [36] layer followed by 3 x 128-cell LSTMP layers [37] with 64 recurrent projection units with a linear recurrent output layer [9]. The duration LSTM-RNN used a single LSTMlayer with 64 cells with feed-forward output layer with linear activation. 
+- duration model (determines how many features (frames)) to pass to acoustic model 
+- Both input and target features were normalized to be zero-mean unit-variance
+
+
+----------------------------------------------------------------------------------------
+Investigating Gated Recurrent Networks
+- Linguistic
+	- 592: quin-phone identities, POS, positional information of phoneme, syllable, word and phrase, number of syllables, words and phrases, etc.
+	- 9: frame position information, e.g. frame position in HMM state and phoneme
+	- features normalized to [0.01, 0.99] 
+- Acoustic
+	- 60 mel-cepstral coefficients, 25 band aperiodicities (BAPs), log F0, voiced/unvoiced
+	- dynamic features for MCCs, BAPs, f0 also computed
+	- features extracted using STRAIGHT vocoder
+	- acoustic features were mean-variacne normalized before modeling, mean and variance were restored at generation time
+	- sampling rate: 48 kHz	
+- Model
+	- 3 layer feed-forward NN at the bottom. After that, gated recurrent NN. Feed-forward has 512 units with tangent activation functions. RNN's have 256 hidden units.
+	- Fixed the momentum, tuned only learning rates
+
+----------------------------------------------------------------------------------------
+An Investigation of RNN Architectures for SPSS
+- Linguistic
+	- quinphone identities along with vowel in the current syllable as categorical features
+	- numerical features include number of phones in the syllable, number of syllables in the word, number of words in the utterance, and so on
+	- total of 305
+	- previous and previous to previous phone contexts not used
+- Acoustic
+	- spectrum extracted from wave files using STRAIGHT tool (dim = 513), frame shift = 5ms
+	- Output features unnormalized (normalizing between 0.01 and 0.99 did not improve performance)
+	- Did not include 40 and aperiodicity (because comparing RNN architectures, not doing full synthesis)
+- Model
+	- 305Linear -> 600Recurrent -> 600 Recurrent, with ReLU
+	- Adadelta for learning rate setting and Nesterov's accelerated gradient based momentum
+	- momentum set to 0.9
+	- Minibatch set  to 530 so that number of updates per epoch will be approximately equal to RNN approach based updates
+
+
+----------------------------------------------------------------------------------------
+TTS Synthesis with Bidirectional LSTM based RNN
+- Linguistic
+	- 355: phone labels POS labels of the current word, TOBI labels, and numerical features for the numerical contexts, e.g. the number of words in a phrase or the position of the current frame of the current phone, the length of a word and phrase, stress of a syllable
+- Acoustic
+	- 16 kHz windowed by 25 ms window, shifted every 5 ms
+	- LPC of 40th order is transformed into static LSPs and their dynamic counterparts (w/o dynamic counterparts for LSTM)
+	- 127: voiced/unvoiced flag, log F0, LSP, gain, their dynamic counterparts
+	- Removing silence frames (but not for LSTM)
+	- formant sharpening based on LSP frequencies [24] is used to reduce the over-smoothing problem of statistic parametric modeling and the resultant 'muffled' speech. Finally speech waveforms are synthesized by an LCP synthesizer by using generated speech paramemters
+- Model
+	- Hybrid (DNN + LSTM) A: 4 hidden layers with 512 units each, where 3 bottom layers are feed-forward with sigmoid activation, while top hidden layer is BLSTM with 256 hidden
+	- Hybrid B: like Hybrid A, but with 2 feedforward with sigmoid and 2 BLSTM layers
+	- Adding more layers doesn't seem to help
+	
