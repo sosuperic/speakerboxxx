@@ -14,6 +14,10 @@ from collections import OrderedDict
 class FeatureExtractor:
     def __init__(self):
         self.cmudict = nltk.corpus.cmudict.dict()
+        self.tagdict = nltk.data.load('help/tagsets/upenn_tagset.pickle')
+        self.univeral_tagset = ['VERB', 'NOUN', 'PRON', 'ADJ', 'ADV', 'ADP', 'CONJ',
+            'DET', 'NUM', 'PRT', 'X', '.']
+        self.universal_tagset_to_idx = {tag: i for i, tag in enumerate(self.univeral_tagset)}
 
         # See the notes in _align_phonemes_and_words for the reasoning for the following
         self.cmudict['and'] = [['AE', 'N', 'D']]
@@ -29,6 +33,8 @@ class FeatureExtractor:
 
         self._create_word_phone_contexts()
         self._add_syllable_context()
+        self._add_pos_to_context()
+
 
     ################################################################################################
     # Pre analysis
@@ -357,7 +363,7 @@ class FeatureExtractor:
                 # print word_syllables[w_idx]
                 cur_syl = word_syllables[w_idx][syl_idx]
                 word_syllable_phone_times.append( (word, cur_syl, phone, time) )
-                print word, cur_syl, phone, time
+                # print word, cur_syl, phone, time
 
                 at_end_of_word = syl_idx + 1 == len(word_syllables[w_idx])
                 at_end_of_syllable = p_idx + 1 == len(cur_syl)
@@ -374,8 +380,45 @@ class FeatureExtractor:
             self.rec_phone_contexts[i] = (rec, word_syllable_phone_times)
 
     ################################################################################################
-    # Feature building
+    # POS tagging
     ################################################################################################
+    
+    # These are copied and pasted directly from w0rdplay/pos_tagger.py
+    def tokenize(self, text):
+        return nltk.word_tokenize(text)
+
+    def pos_tag(self, tokenized):
+        return nltk.pos_tag(tokenized)
+
+    def pos_tag_simplified(self, tokenized):
+        tagged = self.pos_tag(tokenized)
+        simplified = [(word, nltk.map_tag('en-ptb', 'universal', tag)) for word, tag in tagged]
+        return simplified
+
+    def _add_pos_to_context(self):
+        """
+        Sets
+        ----
+        ('charged', ['CH', 'AA', 'R', 'JH', 'D'], 'CH', '2.32450') -> ('VBD', charged', ['CH', 'AA', 'R', 'JH', 'D'], 'CH', '2.32450')
+        """
+        tagged = {}
+        for i in range(len(self.rec_phone_contexts)):
+            print i
+            pos_plus_contexts = []
+            rec, contexts = self.rec_phone_contexts[i]
+            for word, syl, phone, time in contexts:
+                if word in tagged:
+                    tag = tagged[word]
+                else:
+                    tag = self.pos_tag_simplified(self.tokenize(word))[0][1]   # list of (word, tags)
+                pos_plus_contexts.append( [tag, word, syl, phone, time] )
+            self.rec_phone_contexts[i] = pos_plus_contexts
+
+    ################################################################################################
+    # Feature building - phoneme encoding, etc.
+    ################################################################################################
+
+
 
 if __name__ == '__main__':
     fe = FeatureExtractor()
