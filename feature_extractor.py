@@ -4,11 +4,16 @@ WAVS_PATH = 'data/cmu_us_slt_arctic/wav/'
 PHONE_LABELS_PATH = 'data/cmu_us_slt_arctic/lab/'
 TRANSCRIPTS_PATH = 'data/cmuarctic.data.txt'
 
+LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs'
+ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets'
+DURATION_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/duration_targets'
+
 import os
 import pprint
 import nltk
 import string
 import pdb
+import h5py
 from collections import OrderedDict
 
 import pyworld as pw
@@ -19,9 +24,9 @@ class FeatureExtractor:
     def __init__(self):
         self.cmudict = nltk.corpus.cmudict.dict()
         self.tagdict = nltk.data.load('help/tagsets/upenn_tagset.pickle')
-        self.univeral_tagset = ['VERB', 'NOUN', 'PRON', 'ADJ', 'ADV', 'ADP', 'CONJ',
+        self.universal_tagset = ['VERB', 'NOUN', 'PRON', 'ADJ', 'ADV', 'ADP', 'CONJ',
             'DET', 'NUM', 'PRT', 'X', '.']
-        self.universal_tagset_to_idx = {tag: i for i, tag in enumerate(self.univeral_tagset)}
+        self.universal_tagset_to_idx = {tag: i for i, tag in enumerate(self.universal_tagset)}
         self.phoneset = ['AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'B', 'CH', 'D', 'DH', 'EH', 'ER', 'EY',
             'F', 'G', 'HH', 'IH', 'IY', 'JH', 'K', 'L', 'M', 'N', 'NG', 'OW', 'OY', 'P', 'R', 'S',
             'SH', 'T', 'TH', 'UH', 'UW', 'V', 'W', 'Y', 'Z', 'ZH']
@@ -50,9 +55,9 @@ class FeatureExtractor:
         self._add_syllable_context()
         self._add_pos_to_context()
 
-        self._extract_phoneme_durations()
-        self._create_linguistic_features()
-        # self._extract_audio_features()
+        self._save_phoneme_durations()
+        self._save_linguistic_features()
+        self._save_acoustic_targets()
 
     ################################################################################################
     # Pre analysis
@@ -432,14 +437,14 @@ class FeatureExtractor:
                 pos_plus_contexts.append( [tag, word, syl, phone, time] )
             self.rec_phone_contexts[i] = [rec, pos_plus_contexts]
 
-            # if i == 100:
+            # if i == 10:
             #     break
 
     ################################################################################################
     # Feature building - phoneme encoding, POS encoding, counts, etc.
     ################################################################################################
 
-    def _create_linguistic_features(self):
+    def _save_linguistic_features(self):
         # TODO: include neighbors or not?
         """
         Create feature vectors for all utterances. Base unit is at phoneme level.
@@ -473,11 +478,14 @@ class FeatureExtractor:
 
         # pprint.pprint(self.rec_phone_contexts)
         # pprint.pprint(self.rec_phone_durations)
+        feature_size = 2*len(self.phoneset) + len(self.universal_tagset) + 8    # Leave extra bit for frame position?
         for i in range(len(self.rec_phone_contexts)):
             rec, contexts = self.rec_phone_contexts[i]
             w_in_utt_idx = 0
             syl_in_w_idx = 0
             p_in_syl_idx = 0
+
+            features = np.zeros([len(contexts), feature_size])                  # num_phonemes x feature_size
             for j in range(len(contexts)):
                 tag, word, syl, phone, time = contexts[j]
 
@@ -485,7 +493,7 @@ class FeatureExtractor:
                 phone_encoded = np.zeros(len(self.phoneset))
                 phone_encoded[self.phoneset_to_idx[phone]] = 1
                 
-                tag_encoded = np.zeros(len(self.univeral_tagset))
+                tag_encoded = np.zeros(len(self.universal_tagset))
                 tag_encoded[self.universal_tagset_to_idx[tag]] = 1
                 
                 print tag, word, syl, phone
@@ -509,8 +517,11 @@ class FeatureExtractor:
                 # Other
                 utt_dur = np.array([sum([d for p, d in self.rec_phone_durations[i][1]])])
 
+                print p_in_syl_idx, syl_in_w_idx, w_in_utt_idx
+                print utt_dur
+
                 # Concatenate
-                features = np.hstack([
+                frame_features = np.hstack([
                     phone_encoded,
                     tag_encoded,
                     syl_vowel_encoded,
@@ -522,14 +533,12 @@ class FeatureExtractor:
                     num_words_in_utt,
                     utt_dur
                     ])
-
-                # print w_in_utt_idx, syl_in_w_idx,  p_in_syl_idx
-                # print utt_dur
-                # print features
+                features[j,:feature_size-1] = frame_features
 
                 # Similar logic as in _add_syllable_context()
-                at_end_of_word = syl_in_w_idx + 1 == len(self.word_to_syl[word])
+                print self.word_to_syl[word]
                 at_end_of_syl = p_in_syl_idx + 1 == len(syl)
+                at_end_of_word = (syl_in_w_idx + 1 == len(self.word_to_syl[word])) and at_end_of_syl
                 if at_end_of_word:
                     w_in_utt_idx += 1
                     syl_in_w_idx = 0
@@ -539,6 +548,10 @@ class FeatureExtractor:
                     p_in_syl_idx = 0
                 else:
                     p_in_syl_idx += 1
+
+            # Save features to disk
+            with h5py.File(os.path.join(LINGUISTIC_INPUTS_PATH, rec + '.h5'), 'w') as hf:
+                hf.create_dataset('x', data=features)
 
 
     ################################################################################################
@@ -553,7 +566,7 @@ class FeatureExtractor:
         x = x.astype(np.float) / SHORT_MAX
         return x, fs
 
-    def _extract_audio_features(self):
+    def _save_acoustic_targets(self):
         """
         Extract target features every 5ms for acoustic model
         """
@@ -565,7 +578,6 @@ class FeatureExtractor:
             speed=1)
         eps = 1e-10
 
-        features = []
         for fn in os.listdir(WAVS_PATH):
             if fn.endswith('wav'):
                 rec = fn.replace('.wav', '')
@@ -582,16 +594,25 @@ class FeatureExtractor:
                 ap = np.log(ap + eps)
 
                 frames = []
+                frames_voiced = []
                 for time in range(f0.shape[0]):
-                    voiced = True
+                    voiced = 1
                     if abs(f0[time] - np.log(eps)) < 1e-4:                       # unvoiced in this frame
-                        voiced = False
+                        voiced = 0
+                    frames_voiced.append(voiced)
                     frames.append([voiced, f0[time], sp[time, :], ap[time, :]])
 
-                print frames[0]
-                features.append([rec, frames])
+                # Construct acoustic and save to disk
+                acoustic_target = np.hstack([
+                    np.expand_dims(np.array(frames_voiced), 1),
+                    np.expand_dims(f0, 1),      # (num_frames, ) -> (num_frames, 1)
+                    sp,
+                    ap
+                    ])
+                with h5py.File(os.path.join(ACOUSTIC_TARGETS_PATH, rec + '.h5'), 'w') as hf:
+                    hf.create_dataset('y', data=acoustic_target)
 
-    def _extract_phoneme_durations(self):
+    def _save_phoneme_durations(self):
         """
         Extract durations of each phoneme for duration model
 
@@ -623,28 +644,20 @@ class FeatureExtractor:
                 if prev_phone == last_phone:
                     durations.append((last_phone, float(line.split(' ')[0]) - last_phone_start_time))
                     break
+
+            # Save durations to disk
+            duration_targets = np.array([d for p, d in durations])
+            duration_targets = np.expand_dims(duration_targets, 1)      # (num_phonemes, ) -> (num_phonemes, 1)
+            with h5py.File(os.path.join(DURATION_TARGETS_PATH, rec + '.h5'), 'w') as hf:
+                hf.create_dataset('y', data=duration_targets)
+
+            # Save for later use (e.g. duration of utterance feature)
             self.rec_phone_durations.append((rec, durations))
 
-    def align_input_and_duration_features(self):
-        """
-        Features for duration model (one time-step):
-        x = linguistic feature around one phoneme
-        y = float value for duration
-        """
-        pass
-
-    def align_input_and_acoustic_features(self):
-        """
-        Features for acoustic model (one time-step):
-        x = linguistic feature around one phoneme
-        y = log f0, sp, ap
-
-        if f0 is 0 at that 5ms multiple, then interpolate
-
-        x will be the same linguistic feature for [phoneme duration / 5 ms]
-        """
-        pass
-
+    def reading_from_h5py_example(self):
+        f = h5py.File('arctic_a0001.h5', 'r')
+        durations = np.array(f.get('y'))
+        f.close()
 
 if __name__ == '__main__':
     fe = FeatureExtractor()
