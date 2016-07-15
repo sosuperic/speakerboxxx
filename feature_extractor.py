@@ -35,12 +35,12 @@ class FeatureExtractor:
         self.cmudict['orange-green'] = [['AO', 'R', 'AH', 'N', 'JH', 'G', 'R', 'IY', 'N']]
         self.cmudict['gold-green'] = [['G', 'OW', 'L', 'D', 'G', 'R', 'IY', 'N']]
 
-        self._create_word_phone_contexts()
-        self._add_syllable_context()
-        self._add_pos_to_context()
+        # self._create_word_phone_contexts()
+        # self._add_syllable_context()
+        # self._add_pos_to_context()
 
-        self._extract_phoneme_durations()
-        # self._extract_audio_features()
+        # self._extract_phoneme_durations()
+        self._extract_audio_features()
 
     ################################################################################################
     # Pre analysis
@@ -423,16 +423,94 @@ class FeatureExtractor:
     ################################################################################################
     # Feature building - phoneme encoding, POS encoding, counts, etc.
     ################################################################################################
+    # def _one_hot_encode_features(self):
+    #     """
+    #     Encode POS, phoneme, etc.
+    #     """
+
+    # def _add_position_of_current_syllable_in_word(self):
+
+    # ###
+    # # 
+    # # Unidirectional: 3 numerical features for coarse-coded position of the current frame in the current phoneme,
+    # # MSFT: position of the current frame of the current phone
+
+    # # Categorical
+    # # phoneme identity
+    # # pos identity
+    # # vowel in the current syllable
+
+    # ###
+    # def _add_position_of_current_phoneme_in_syllable(self):
+    # def _add_position_of_current_syllable_in_word(self):
+    # def _add_position_of_current_word_in_total(self):
+
+    # ###
+    # def _add_number_of_phonemes_in_syllable(self):
+    # def _add_number_of_syllables_in_word(self):
+    # def _add_number_of_syllables_in_total(self): ?
+    # def _add_number_of_words_in_total(self):
+    # ###    
+
+    # def _add_duration_of_current_segment(self):
+    #     pass
+
+    # def _create_features(self):
+
+    #     # TODO: include neighbors or not?
+    #     pass
+
 
     ################################################################################################
     # 
     # ACOUSTIC FEATURES
     # 
     ################################################################################################
+    def _wavread(self, filename):
+        SHORT_MAX = 32767   # What is this?
+
+        fs, x = read(filename)
+        x = x.astype(np.float) / SHORT_MAX
+        return x, fs
+
+    def _extract_audio_features(self):
+        pyDioOpt = pw.pyDioOption(
+            f0_floor=50, 
+            f0_ceil=600, 
+            channels_in_octave=2,
+            frame_period=5, 
+            speed=1)
+        eps = 1e-10
+
+        features = []
+        for fn in os.listdir(WAVS_PATH):
+            if fn.endswith('wav'):
+                rec = fn.replace('.wav', '')
+                print rec
+                fp = os.path.join(WAVS_PATH, fn)
+                x, fs = self._wavread(fp)
+                f0, sp, ap, pyDioOpt = pw.wav2world(x, fs, pyDioOpt=pyDioOpt)    # use default options
+
+                # num_frames = math.ceil(num_samples / sample_rate * s_to_ms / frame_period_window)
+                #            = math.ceil(x.shape[0] / fs * 1000 / 5)
+                # shapes: (num_frames, ), (num_frames, 513), (num_frames, 513)
+                f0 = np.log(f0 + eps)
+                sp = np.log(sp + eps)
+                ap = np.log(ap + eps)
+
+                frames = []
+                for time in range(f0.shape[0]):
+                    voiced = True
+                    if abs(f0[time] - np.log(eps)) < 1e-4:                       # unvoiced in this frame
+                        voiced = False
+                    frames.append([voiced, f0[time], sp[time, :], ap[time, :]])
+
+                print frames[0]
+                features.append([rec, frames])
 
     def _extract_phoneme_durations(self):
         """
-        Extract durations of each phoneme for duraiton model
+        Extract durations of each phoneme for duration model
 
         Notes
         -----
@@ -464,14 +542,28 @@ class FeatureExtractor:
                     break
             self.rec_phone_durations.append((rec, durations))
 
-    def align_input_features_and_duration_features(self):
+    def align_input_and_duration_features(self):
+        """
+        Features for duration model (one time-step):
+        x = linguistic feature around one phoneme
+        y = float value for duration
+        """
         pass
 
-    def align_input_features_and_acoustic_features(self):
+    def align_input_and_acoustic_features(self):
+        """
+        Features for acoustic model (one time-step):
+        x = linguistic feature around one phoneme
+        y = log f0, sp, ap
+
+        if f0 is 0 at that 5ms multiple, then interpolate
+
+        x will be the same linguistic feature for [phoneme duration / 5 ms]
+        """
         pass
 
 
 if __name__ == '__main__':
     fe = FeatureExtractor()
     # pprint.pprint(fe.rec_phone_contexts)
-    pprint.pprint(fe.rec_phone_durations)
+    # pprint.pprint(fe.rec_phone_durations)
