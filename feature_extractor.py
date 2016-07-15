@@ -9,6 +9,7 @@ import pprint
 import nltk
 import string
 import pdb
+from collections import OrderedDict
 
 class FeatureExtractor:
     def __init__(self):
@@ -25,6 +26,9 @@ class FeatureExtractor:
         self.cmudict['life-conserving'] = [['L', 'AY', 'F', 'K', 'AH', 'N', 'S', 'ER', 'V',  'IH', 'NG']]
         self.cmudict['orange-green'] = [['AO', 'R', 'AH', 'N', 'JH', 'G', 'R', 'IY', 'N']]
         self.cmudict['gold-green'] = [['G', 'OW', 'L', 'D', 'G', 'R', 'IY', 'N']]
+
+        self._create_word_phone_contexts()
+        self._add_syllable_context()
 
     ################################################################################################
     # Pre analysis
@@ -212,9 +216,7 @@ class FeatureExtractor:
 
         return word_phone_times
 
-
-
-    def align_phonemes_and_words(self):
+    def _create_word_phone_contexts(self):
         """
         Align phones to words for each recording
 
@@ -228,7 +230,7 @@ class FeatureExtractor:
                 ...
             )
         """
-        recording_word_phone_times = []
+        rec_word_phone_times = []
 
         lines = tuple(open(TRANSCRIPTS_PATH, 'r'))
         for l in lines:
@@ -244,23 +246,132 @@ class FeatureExtractor:
 
             # pdb.set_trace()
             word_phone_times = self._align_phonemes_and_words(phone_times, word_phones)
-            print word_phone_times
-            print ''
+            # print word_phone_times
+            # print ''
             assert(len(word_phone_times) == len(phone_times))
-            recording_word_phone_times.append((recording, word_phone_times))
+            rec_word_phone_times.append((recording, word_phone_times))
 
-        return recording_word_phone_times
+        self.rec_phone_contexts = rec_word_phone_times
 
 
     ################################################################################################
     # Context building 
     ################################################################################################
 
-    def group_phonemes_by_syllable(self, phonemes):
+    # These are directly copied and pasted from w0rdplay/syllabizer
+    def is_vowel(self, phoneme):
+        return not set('AEIOU').isdisjoint(set(phoneme))
+
+    def _count_number_of_syllables_in_phonemes(self, phonemes):
+        return len([p for p in phonemes if self.is_vowel(p)])
+
+    def _phoneme_syllabize(self, phonemes):
         """
-        Given set of phonemes
-        """    
-        pass
+        Main helper function for phoneme_syllabize
+        """
+        def next_phoneme_is_vowel(phonemes, cur_i):
+            next_i = cur_i + 1
+            if next_i >= len(phonemes):
+                return False
+            else:
+                return self.is_vowel(phonemes[next_i])
+
+        if self._count_number_of_syllables_in_phonemes(phonemes) == 1:
+            return [phonemes]
+
+        syllables = []
+        cur_syllable = []
+        prev_phoneme_is_vowel = False
+        i = 0
+        while i < len(phonemes):
+            p = phonemes[i]
+            if self.is_vowel(p):
+                if prev_phoneme_is_vowel:
+                    syllables.append(cur_syllable)
+                    cur_syllable = [p]
+                else:
+                    cur_syllable.append(p)
+                prev_phoneme_is_vowel = True
+            else:
+                if next_phoneme_is_vowel(phonemes, i):
+                    syllables.append(cur_syllable)
+                    cur_syllable = [p]
+                    prev_phoneme_is_vowel = False
+                elif prev_phoneme_is_vowel:
+                    cur_syllable.append(p)
+                    prev_phoneme_is_vowel = False
+                else:
+                    syllables.append(cur_syllable)
+                    cur_syllable = [p]
+                    while (i + 1 < len(phonemes)) and (not self.is_vowel(p)):   # Append until next vowel
+                        i += 1
+                        p = phonemes[i]
+                        cur_syllable.append(p)
+
+                    if sum([1 for p in cur_syllable if self.is_vowel(p)]) == 0: # Didn't hit any more vowels
+                        syllables[-1] += cur_syllable                           # Test case: apologized
+                        cur_syllable = []                                       # Clear so it gets filtered out
+
+                    prev_phoneme_is_vowel = True
+            i += 1
+        syllables.append(cur_syllable)
+
+        # Filter out initial empty syllable, e.g. hello
+        syllables = [syl for syl in syllables if len(syl) > 0]
+
+        return syllables
+
+    def _add_syllable_context(self):
+        """
+        Add syllable context to existing rec - word, phone, time contexts
+
+        Sets
+        ----
+        ('charged', 'CH', '2.32450'), -> ('charged', ['CH', 'AA', 'R', 'JH', 'D'], 'CH', '2.32450')
+        """ 
+        for i in range(len(self.rec_phone_contexts)):
+            rec, word_phone_times = self.rec_phone_contexts[i]
+            word_syllable_phone_times = []
+
+            # word_phones['author'] = [AO, TH, ER]
+            word_phones = OrderedDict()                       # Maintain order of insertion, i.e. times
+            for word, phone, time in word_phone_times:
+                if word in word_phones:
+                    word_phones[word].append(phone)
+                else:
+                    word_phones[word] = [phone]
+
+            # [ [[AO], [TH, ER]], ... ]
+            word_syllables = []                             # [[]]
+            for word, phones in word_phones.items():        # Split phonemes for that word into syllables
+                word_syllables.append(self._phoneme_syllabize(phones))
+
+            # print(word_syllables) 
+            print rec 
+
+            w_idx = 0                                       # Index of current word in word_syllables
+            syl_idx = 0                                     # Index of current syllable in current word
+            p_idx = 0                                       # Index of current phoneme in current syllable
+            # pdb.set_trace()
+            for word, phone, time in word_phone_times:      # Glue together words, syllables, and phonemes
+                # print word_syllables[w_idx]
+                cur_syl = word_syllables[w_idx][syl_idx]
+                word_syllable_phone_times.append( (word, cur_syl, phone, time) )
+                print word, cur_syl, phone, time
+
+                at_end_of_word = syl_idx + 1 == len(word_syllables[w_idx])
+                at_end_of_syllable = p_idx + 1 == len(cur_syl)
+                if at_end_of_syllable and at_end_of_word:
+                    w_idx += 1
+                    syl_idx = 0
+                    p_idx = 0
+                elif at_end_of_syllable:
+                    syl_idx += 1
+                    p_idx = 0
+                else:
+                    p_idx += 1
+
+            self.rec_phone_contexts[i] = (rec, word_syllable_phone_times)
 
     ################################################################################################
     # Feature building
@@ -268,5 +379,4 @@ class FeatureExtractor:
 
 if __name__ == '__main__':
     fe = FeatureExtractor()
-    # fe.check_phone_set()
-    fe.align_phonemes_and_words()
+    pprint.pprint(fe.rec_phone_contexts)
