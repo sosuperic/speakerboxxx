@@ -1,6 +1,6 @@
 # Extract input linguistic features and output acoustic features from CMU Arctic data
 
-WAVS_PATH = 'data/cmu_slt_arctic/wav/'
+WAVS_PATH = 'data/cmu_us_slt_arctic/wav/'
 PHONE_LABELS_PATH = 'data/cmu_us_slt_arctic/lab/'
 TRANSCRIPTS_PATH = 'data/cmuarctic.data.txt'
 
@@ -10,6 +10,10 @@ import nltk
 import string
 import pdb
 from collections import OrderedDict
+
+import pyworld as pw
+import numpy as np
+from scipy.io.wavfile import read
 
 class FeatureExtractor:
     def __init__(self):
@@ -35,6 +39,8 @@ class FeatureExtractor:
         self._add_syllable_context()
         self._add_pos_to_context()
 
+        self._extract_phoneme_durations()
+        # self._extract_audio_features()
 
     ################################################################################################
     # Pre analysis
@@ -126,7 +132,7 @@ class FeatureExtractor:
         for line in phone_align:
             if line.startswith('#'):
                 continue
-            time = line.split(' ')[0]
+            time = float(line.split(' ')[0])
             phone = line.split(' ')[2].strip('\n').upper()
             phone = self._remove_lexical_stress(phone)
             if phone == 'SSIL' or phone == 'PAU':       # These are non-standard, not in the CMU Dict phone set
@@ -352,9 +358,6 @@ class FeatureExtractor:
             for word, phones in word_phones.items():        # Split phonemes for that word into syllables
                 word_syllables.append(self._phoneme_syllabize(phones))
 
-            # print(word_syllables) 
-            print rec 
-
             w_idx = 0                                       # Index of current word in word_syllables
             syl_idx = 0                                     # Index of current syllable in current word
             p_idx = 0                                       # Index of current phoneme in current syllable
@@ -403,7 +406,7 @@ class FeatureExtractor:
         """
         tagged = {}
         for i in range(len(self.rec_phone_contexts)):
-            print i
+            # print i
             pos_plus_contexts = []
             rec, contexts = self.rec_phone_contexts[i]
             for word, syl, phone, time in contexts:
@@ -412,14 +415,63 @@ class FeatureExtractor:
                 else:
                     tag = self.pos_tag_simplified(self.tokenize(word))[0][1]   # list of (word, tags)
                 pos_plus_contexts.append( [tag, word, syl, phone, time] )
-            self.rec_phone_contexts[i] = pos_plus_contexts
+            self.rec_phone_contexts[i] = [rec, pos_plus_contexts]
+
+            # if i == 10:
+            #     break
 
     ################################################################################################
-    # Feature building - phoneme encoding, etc.
+    # Feature building - phoneme encoding, POS encoding, counts, etc.
     ################################################################################################
 
+    ################################################################################################
+    # 
+    # ACOUSTIC FEATURES
+    # 
+    ################################################################################################
+
+    def _extract_phoneme_durations(self):
+        """
+        Extract durations of each phoneme for duraiton model
+
+        Notes
+        -----
+        We ignored the PAU (pause) phonemes earlier, but we need it to get the length of the last
+        actual phoneme. Doing it here instead of keeping the PAU's and hassling with it when
+        extracting contexts to keep it clean.
+        """
+        # print self.rec_phone_contexts[0]
+        # pdb.set_trace()
+        self.rec_phone_durations = []
+        for rec, contexts in self.rec_phone_contexts:
+            durations = []
+            for i in range(len(contexts) - 1):                  # - 1 because last duration will be calculated specially
+                tag, word, syl, phone, time = contexts[i]
+                duration = contexts[i+1][4] - time
+                durations.append((phone, duration))
+
+            # Last actual phone: we look up
+            last_phone = contexts[-1][3]
+            last_phone_start_time = contexts[-1][4]
+            phone_align = tuple(open(os.path.join(PHONE_LABELS_PATH, rec + '.lab'), 'rb'))
+            phone_align = phone_align[::-1]                     # Reverse order - some have multiple PAU's
+            for i, line in enumerate(phone_align):
+                prev_phone = phone_align[i+1].split(' ')[2].strip('\n').upper()
+                prev_phone = self._remove_lexical_stress((prev_phone))
+                prev_phone = 'AH' if prev_phone == 'AX' else prev_phone
+                if prev_phone == last_phone:
+                    durations.append((last_phone, float(line.split(' ')[0]) - last_phone_start_time))
+                    break
+            self.rec_phone_durations.append((rec, durations))
+
+    def align_input_features_and_duration_features(self):
+        pass
+
+    def align_input_features_and_acoustic_features(self):
+        pass
 
 
 if __name__ == '__main__':
     fe = FeatureExtractor()
-    pprint.pprint(fe.rec_phone_contexts)
+    # pprint.pprint(fe.rec_phone_contexts)
+    pprint.pprint(fe.rec_phone_durations)
