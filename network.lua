@@ -53,15 +53,23 @@ local feedforward = nn.Sequential()
 	:add(nn.Dropout(0.5))
 
 local seq_lstm = nn.SeqLSTM(128, 128)
+seq_lstm.maskzero=true
 local rnn = nn.Sequential()
 	:add(seq_lstm)
 
 local post_rnn = nn.Sequential()
 	:add(nn.Linear(128, 1))
 
+-- Different way of masking. Seems to produce higher loss. Not sure why.
+-- local net = nn.Sequential()
+-- 	:add(nn.Sequencer(nn.MaskZero(feedforward, 1)))
+-- 	:add(rnn)
+-- 	:add(nn.Sequencer(nn.MaskZero(post_rnn, 1)))
+
 local net = nn.Sequential()
 	:add(nn.MaskZero(nn.Sequencer(feedforward), 2))
-	:add(nn.MaskZero(rnn, 2))
+	-- :add(nn.MaskZero(rnn, 2))
+	:add(rnn)			-- Masking is done by setting seq_lstm.maskzero to True
 	:add(nn.MaskZero(nn.Sequencer(post_rnn), 2))
 
 local criterion = nn.SequencerCriterion(nn.MaskZeroCriterion(nn.MSECriterion(), 1))
