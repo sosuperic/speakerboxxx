@@ -57,7 +57,6 @@ class FeatureExtractor:
 
         self._save_phoneme_durations()
         self._save_linguistic_features()
-        self._save_acoustic_targets()
 
     ################################################################################################
     # Pre analysis
@@ -553,65 +552,9 @@ class FeatureExtractor:
             with h5py.File(os.path.join(LINGUISTIC_INPUTS_PATH, rec + '.h5'), 'w') as hf:
                 hf.create_dataset('x', data=features)
 
-
     ################################################################################################
-    # 
-    # ACOUSTIC FEATURES
-    # 
+    # DURATION MODEL FEATURES
     ################################################################################################
-    def _wavread(self, filename):
-        SHORT_MAX = 32767   # What is this?
-
-        fs, x = read(filename)
-        x = x.astype(np.float) / SHORT_MAX
-        return x, fs
-
-    def _save_acoustic_targets(self):
-        """
-        Extract target features every 5ms for acoustic model
-        """
-        pyDioOpt = pw.pyDioOption(
-            f0_floor=50, 
-            f0_ceil=600, 
-            channels_in_octave=2,
-            frame_period=5, 
-            speed=1)
-        eps = 1e-10
-
-        for fn in os.listdir(WAVS_PATH):
-            if fn.endswith('wav'):
-                rec = fn.replace('.wav', '')
-                print rec
-                fp = os.path.join(WAVS_PATH, fn)
-                x, fs = self._wavread(fp)
-                f0, sp, ap, pyDioOpt = pw.wav2world(x, fs, pyDioOpt=pyDioOpt)    # use default options
-
-                # num_frames = math.ceil(num_samples / sample_rate * s_to_ms / frame_period_window)
-                #            = math.ceil(x.shape[0] / fs * 1000 / 5)
-                # shapes: (num_frames, ), (num_frames, 513), (num_frames, 513)
-                f0 = np.log(f0 + eps)
-                sp = np.log(sp + eps)
-                ap = np.log(ap + eps)
-
-                frames = []
-                frames_voiced = []
-                for time in range(f0.shape[0]):
-                    voiced = 1
-                    if abs(f0[time] - np.log(eps)) < 1e-4:                       # unvoiced in this frame
-                        voiced = 0
-                    frames_voiced.append(voiced)
-                    frames.append([voiced, f0[time], sp[time, :], ap[time, :]])
-
-                # Construct acoustic and save to disk
-                acoustic_target = np.hstack([
-                    np.expand_dims(np.array(frames_voiced), 1),
-                    np.expand_dims(f0, 1),      # (num_frames, ) -> (num_frames, 1)
-                    sp,
-                    ap
-                    ])
-                with h5py.File(os.path.join(ACOUSTIC_TARGETS_PATH, rec + '.h5'), 'w') as hf:
-                    hf.create_dataset('y', data=acoustic_target)
-
     def _save_phoneme_durations(self):
         """
         Extract durations of each phoneme for duration model

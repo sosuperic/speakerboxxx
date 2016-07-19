@@ -1,3 +1,5 @@
+require 'optim'
+
 local tnt = require 'torchnet'
 
 -- use GPU or not:
@@ -10,7 +12,6 @@ print(string.format('running on %s', config.usegpu and 'GPU' or 'CPU'))
 local function getIterator(split)
    return tnt.ParallelDatasetIterator{
       nthread = 1,
-      -- init    = function() require 'torchnet' end,
       closure = function()
       	-- Closure's in separate threads, hence why we need to require torchnet
       	-- Also reason (besides modularity) for putting dataset into separate file.
@@ -19,10 +20,10 @@ local function getIterator(split)
         local dataset = require 'dataset'
 		return tnt.BatchDataset{
 			batchsize = 32,
-			dataset = tnt.ArcticDataset(split)
+			-- dataset = tnt.DurationDataset(split)
+			dataset = tnt.AcousticDataset(split)
 		}
       end,
-
       transform = function(sample)
       	local max_seq_len = 0
       	for i=1,#sample.input do
@@ -44,33 +45,27 @@ local function getIterator(split)
    }
 end
 
-require 'optim'
-require 'rnn'
-require 'nn'
-local feedforward = nn.Sequential()
-	:add(nn.Linear(98, 64))
-	:add(nn.ReLU())
-	:add(nn.Dropout(0.5))
+-- local net, criterion = unpack(require 'duration_model')
+local net, criterion = unpack(require 'acoustic_model')
 
-local seq_lstm = nn.SeqLSTM(64, 64)
-seq_lstm.maskzero=true
-local rnn = nn.Sequential()
-	:add(seq_lstm)
+-- local it = getIterator('train_acoustic')
+-- for sample in it() do
+-- 	local output = net:forward(sample.input)
+-- 	local loss = criterion:forward(output, sample.target)
+-- 	print(output:size())
+-- 	print(sample.target:size())
+-- 	print(loss)
+-- 	os.exit()
 
-local post_rnn = nn.Sequential()
-	:add(nn.Linear(64, 1))
+-- 	-- print(sample.input:size())
+-- 	-- print(sample.target:size())
+-- 	-- os.exit()
+-- end
+-- os.exit()
 
-local net = nn.Sequential()
-	:add(nn.MaskZero(nn.Sequencer(feedforward), 2))
-	-- :add(nn.MaskZero(rnn, 2))
-	:add(rnn)			-- Masking is done by setting seq_lstm.maskzero to True
-	:add(nn.MaskZero(nn.Sequencer(post_rnn), 2))
-
-local criterion = nn.SequencerCriterion(nn.MaskZeroCriterion(nn.MSECriterion(), 1))
-
-
--- set up training engine:
+-- Set up engine and define hooks
 local engine = tnt.OptimEngine()
+-- local val_engine = 
 local train_meter  = tnt.AverageValueMeter()
 local val_meter = tnt.AverageValueMeter()
 local timer = tnt.TimeMeter{unit=true}
@@ -129,12 +124,13 @@ end
 -- train the model:
 engine:train{
    network   = net,
-   iterator  = getIterator('train_duration'),
+   -- iterator  = getIterator('train_duration'),
+   iterator  = getIterator('train_acoustic'),
    criterion = criterion,
-   optimMethod = optim.adam,
+   optimMethod = optim.sgd,
    config = {
-    learningRate = 0.001,
-    -- momentum = 0.9,
+    learningRate = 1e-2,
+    momentum = 0.9,
  	},
    maxepoch  = 100,
 }
