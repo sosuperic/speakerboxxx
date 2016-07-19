@@ -7,8 +7,7 @@ local config = cmd:parse(arg)
 print(string.format('running on %s', config.usegpu and 'GPU' or 'CPU'))
 
 -- function that sets of dataset iterator:
-local function getIterator()
-
+local function getIterator(split)
    return tnt.ParallelDatasetIterator{
       nthread = 1,
       -- init    = function() require 'torchnet' end,
@@ -20,7 +19,7 @@ local function getIterator()
         local dataset = require 'dataset'
 		return tnt.BatchDataset{
 			batchsize = 32,
-			dataset = tnt.ArcticDataset()
+			dataset = tnt.ArcticDataset(split)
 		}
       end,
 
@@ -45,26 +44,21 @@ local function getIterator()
    }
 end
 
+require 'optim'
 require 'rnn'
 require 'nn'
 local feedforward = nn.Sequential()
-	:add(nn.Linear(98, 128))
+	:add(nn.Linear(98, 64))
 	:add(nn.ReLU())
 	:add(nn.Dropout(0.5))
 
-local seq_lstm = nn.SeqLSTM(128, 128)
+local seq_lstm = nn.SeqLSTM(64, 64)
 seq_lstm.maskzero=true
 local rnn = nn.Sequential()
 	:add(seq_lstm)
 
 local post_rnn = nn.Sequential()
-	:add(nn.Linear(128, 1))
-
--- Different way of masking. Seems to produce higher loss. Not sure why.
--- local net = nn.Sequential()
--- 	:add(nn.Sequencer(nn.MaskZero(feedforward, 1)))
--- 	:add(rnn)
--- 	:add(nn.Sequencer(nn.MaskZero(post_rnn, 1)))
+	:add(nn.Linear(64, 1))
 
 local net = nn.Sequential()
 	:add(nn.MaskZero(nn.Sequencer(feedforward), 2))
@@ -74,30 +68,45 @@ local net = nn.Sequential()
 
 local criterion = nn.SequencerCriterion(nn.MaskZeroCriterion(nn.MSECriterion(), 1))
 
-local it = getIterator()
--- for sample in it() do
--- 	-- print(sample.input)
--- 	local act = net:forward(sample.input)
--- 	local err = criterion:forward(act, sample.target)
--- 	print(err)
--- 	-- print(act:size())
--- 	-- print(sample.target:size())
--- 	-- print nn.JoinTable()
--- 	os.exit()
--- end
 
 -- set up training engine:
-local engine = tnt.SGDEngine()
-local meter  = tnt.AverageValueMeter()
+local engine = tnt.OptimEngine()
+local train_meter  = tnt.AverageValueMeter()
+local val_meter = tnt.AverageValueMeter()
+local timer = tnt.TimeMeter{unit=true}
+engine.hooks.onStart = function(state)
+	-- state.epoch
+	-- state.maxepoch
+	-- state.config
+end
 engine.hooks.onStartEpoch = function(state)
-   meter:reset()
+   train_meter:reset()
 end
 engine.hooks.onForwardCriterion = function(state)
-   meter:add(state.criterion.output)
+   train_meter:add(state.criterion.output)
    if state.training then
-      print(string.format('avg. loss: %2.4f',
-   meter:value()))
+      print(string.format('Epoch: %d; avg. loss: %2.4f',
+   		state.epoch, train_meter:value()))
    end
+end
+engine.hooks.onEndEpoch = function(state)
+	timer:incUnit()
+	print(string.format('Avg time for one epoch: %.4f',
+		timer:value()))
+
+	-- measure test loss and error:
+	-- val_meter:reset()
+	-- engine:test{
+	--    network   = net,
+	--    iterator  = getIterator('valid'),
+	--    criterion = criterion,
+	-- }
+	-- print(state.network.output)
+	-- print(string.format('Epoch: %d; test loss: %2.4f',
+	--    val_meter:value()))
+end
+engine.hooks.onEnd = function(state)
+	-- torch.save('net.t7', net)
 end
 
 -- set up GPU training:
@@ -120,18 +129,12 @@ end
 -- train the model:
 engine:train{
    network   = net,
-   iterator  = getIterator(),
+   iterator  = getIterator('train'),
    criterion = criterion,
-   lr        = 0.001,
-   maxepoch  = 50,
+   optimMethod = optim.adam,
+   config = {
+    learningRate = 0.001,
+    -- momentum = 0.9,
+ 	},
+   maxepoch  = 100,
 }
-
--- measure test loss and error:
-meter:reset()
-engine:test{
-   network   = net,
-   iterator  = getIterator('test'),
-   criterion = criterion,
-}
-print(string.format('test loss: %2.4f',
-   meter:value()))
