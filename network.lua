@@ -129,7 +129,7 @@ end
 -- train the model:
 engine:train{
    network   = net,
-   iterator  = getIterator('train'),
+   iterator  = getIterator('train_duration'),
    criterion = criterion,
    optimMethod = optim.adam,
    config = {

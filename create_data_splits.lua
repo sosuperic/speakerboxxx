@@ -24,27 +24,28 @@ local files = scandir(LINGUISTIC_INPUTS_PATH)
 local tr, va, te = {}, {}, {}
 for i, fn in ipairs(files) do
 	local rec = fn:sub(1, #fn-3)		-- Strip '.h5' -> arctic_a0001
-	local seq_len = load_hdf5_array(path.join(LINGUISTIC_INPUTS_PATH, fn), 'x'):size(1)
 
-	if i <= NUM_VALID then table.insert(va, {rec, seq_len})
-	elseif (i > NUM_VALID and (i <= NUM_VALID + NUM_TEST)) then table.insert(te, {rec, seq_len})
-	else table.insert(tr, {rec, seq_len})
+	-- [*]_seq_len is sequence length for * model
+	-- We sort so we can do curriculum learning
+	local x = load_hdf5_array(path.join(LINGUISTIC_INPUTS_PATH, fn), 'x')
+	local duration_seq_len = x:size(1)
+	local acoustic_seq_len = x[1][97] 		-- Second to last feature is total time of sequence
+
+	if i <= NUM_VALID then table.insert(va, {rec, duration_seq_len, acoustic_seq_len})
+	elseif (i > NUM_VALID and (i <= NUM_VALID + NUM_TEST)) then table.insert(te, {rec, duration_seq_len, acoustic_seq_len})
+	else table.insert(tr, {rec, duration_seq_len, acoustic_seq_len})
 	end
 end
 
--- Sort each split by sequence length
-function sort_by_seq_length(split)
+-- Sort each split by sequence length. Then write recording names to file
+function sort_by_seq_length(split, idx)
+	-- idx=2 -> phoneme; idx=3 -> duration
 	local function sorter(a, b)
-		if (a[2] < b[2]) then return true else return false end
+		if (a[idx] < b[idx]) then return true else return false end
 	end
 	table.sort(split, sorter)
 	return split
 end
-local tr = sort_by_seq_length(tr)
-local va = sort_by_seq_length(va)
-local te = sort_by_seq_length(te)
-
--- Write recording names to file
 local function write_to_file(tbl, fn)
 	local f = io.open(fn, 'w')
 	for i, rec_len_tuple in ipairs(tbl) do
@@ -56,6 +57,16 @@ local function write_to_file(tbl, fn)
 	end
 end
 
-write_to_file(tr, path.join(OUT_PATH, 'train.txt'))
-write_to_file(va, path.join(OUT_PATH, 'valid.txt'))
-write_to_file(te, path.join(OUT_PATH, 'test.txt'))
+local tr_duration = sort_by_seq_length(tr, 2)
+local va_duration = sort_by_seq_length(va, 2)
+local te_duration = sort_by_seq_length(te, 2)
+write_to_file(tr_duration, path.join(OUT_PATH, 'train_duration.txt'))
+write_to_file(va_duration, path.join(OUT_PATH, 'valid_duration.txt'))
+write_to_file(te_duration, path.join(OUT_PATH, 'test_duration.txt'))
+
+local tr_acoustic = sort_by_seq_length(tr, 3)
+local va_acoustic = sort_by_seq_length(va, 3)
+local te_acoustic = sort_by_seq_length(te, 3)
+write_to_file(tr_acoustic, path.join(OUT_PATH, 'train_acoustic.txt'))
+write_to_file(va_acoustic, path.join(OUT_PATH, 'valid_acoustic.txt'))
+write_to_file(te_acoustic, path.join(OUT_PATH, 'test_acoustic.txt'))
