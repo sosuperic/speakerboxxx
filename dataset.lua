@@ -53,7 +53,7 @@ end
 local DurationDataset, Dataset = torch.class('tnt.DurationDataset', 'tnt.Dataset', tnt)
 
 function DurationDataset:__init(split)
-	self.recs = lines_from(path.join(SPLIT_PATH, split .. '.txt'))
+	self.recs = lines_from(path.join(SPLIT_PATH, 'duration', split .. '.txt'))
 	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH, self.recs)
 	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH, self.recs)
 	self.n = #self.linguistic_input_fps
@@ -76,7 +76,7 @@ end
 local AcousticDataset, Dataset = torch.class('tnt.AcousticDataset', 'tnt.Dataset', tnt)
 
 function AcousticDataset:__init(split)
-	self.recs = lines_from(path.join(SPLIT_PATH, split .. '.txt'))
+	self.recs = lines_from(path.join(SPLIT_PATH, 'acoustic', split .. '.txt'))
 	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH, self.recs)
 	self.acoustic_target_fps = create_full_path(ACOUSTIC_TARGETS_PATH, self.recs)
 	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH, self.recs)
