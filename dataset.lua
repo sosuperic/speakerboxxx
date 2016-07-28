@@ -28,25 +28,6 @@ local function load_hdf5_array(path, name)
 	return data
 end
 
-table.reduce = function(list, fn) 
-    local acc
-    for k, v in ipairs(list) do
-        if 1 == k then
-            acc = v
-        else
-            acc = fn(acc, v)
-        end 
-    end 
-    return acc 
-end
-
-local function round(x)
-  if x%2 ~= 0.5 then
-    return math.floor(x+0.5)
-  end
-  return x-0.5
-end
-
 ----------------------------------------------------------------------------------------------------------------
 -- Duration model dataset loader
 ----------------------------------------------------------------------------------------------------------------
@@ -64,9 +45,11 @@ function DurationDataset:size()
 end
 
 function DurationDataset:get(idx)
+	local rec = self.linguistic_input_fps[idx]:match( "([^/]+)$"):gsub(".h5", "")
 	return {
 				input = load_hdf5_array(self.linguistic_input_fps[idx], 'x'),
-				target = load_hdf5_array(self.duration_target_fps[idx], 'y')
+				target = load_hdf5_array(self.duration_target_fps[idx], 'y'),
+				rec = rec
 			}
 end
 
@@ -131,8 +114,11 @@ function AcousticDataset:get(idx)
 		end
 	end
 
+	local rec = self.linguistic_input_fps[idx]:match( "([^/]+)$"):gsub(".h5", "")
+
 	return {
 			input = input,
-			target = load_hdf5_array(self.acoustic_target_fps[idx], 'y')
+			target = load_hdf5_array(self.acoustic_target_fps[idx], 'y'),
+			rec = rec,
 		}
 end

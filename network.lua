@@ -1,19 +1,31 @@
+-- Create a network. Setup, move to GPU if needed, train and test
+
 require 'optim'
 require 'socket'
 require 'pl'
 require 'csvigo'
 require 'utils.lua_utils'
+require 'hdf5'
+
+TEST_OUTPUTS_PATH = 'outputs/spectral/'
 
 local Network = {}
 
 function Network:init(opt)
     self.tnt = require 'torchnet'
-    self:setup_model(opt)
-    self:setup_engine(opt)
     self:setup_gpu(opt)
+    if opt.mode == 'train' then
+        self:setup_model(opt)
+        self:setup_train_engine(opt)
+    elseif opt.mode == 'test' then
+        self:setup_test(opt)
+    end
+    self:move_to_gpu(opt)
 end
 
-
+------------------------------------------------------------------------------------------------
+-- TRAINING
+------------------------------------------------------------------------------------------------
 function Network:setup_model(opt)
     local method = {
         sgd = optim.sgd,
@@ -36,6 +48,8 @@ function Network:setup_model(opt)
     elseif opt.model == 'acoustic' then
         local net, criterion = unpack(require 'acoustic_model')
         self.net = net
+        -- torch.save('models/acoustic/2016_7_20___14_30_32/net_e1.t7', net)
+        -- os.exit()
         self.criterion = criterion
         self.model = 'acoustic'
         self.train_iterator = self:get_iterator(opt.batchsize, 'acoustic', split)
@@ -46,12 +60,13 @@ function Network:setup_model(opt)
     end
 end
 
-function Network:setup_engine(opt)
+function Network:setup_train_engine(opt)
     -- Set up engines and define hooks
     self.engine = self.tnt.OptimEngine()
     self.train_meter  = self.tnt.AverageValueMeter()
     self.valid_engine = self.tnt.SGDEngine()
     self.valid_meter = self.tnt.AverageValueMeter()
+    self.engines = {self.engine, self.valid_engine}
     self.timer = self.tnt.TimeMeter{unit=true}
 
     -- Hooks for main (training) engine
@@ -146,6 +161,157 @@ function Network:setup_logger(opt)
     self.logger:setNames{'Train loss', 'Valid loss', 'Avg. epoch time'}
 end
 
+function Network:train(opt)
+    self.engine:train{
+        network   = self.net,
+        iterator  = self.train_iterator,
+        criterion = self.criterion,
+        optimMethod = self.optim_method,
+        config = {
+            learningRate = opt.lr,
+            learningRateDecay = opt.lr_decay,
+            momentum = opt.mom,
+            dampening = opt.damp,
+            nesterov = opt.nesterov,
+        },
+        maxepoch  = opt.maxepochs,
+    }
+end
+
+------------------------------------------------------------------------------------------------
+-- TESTING
+------------------------------------------------------------------------------------------------
+function Network:setup_test(opt)
+    n, self.duration_criterion = unpack(require 'duration_model')
+    _, self.acoustic_criterion = unpack(require 'acoustic_model')
+    self.criterions = {self.duration_criterion, self.acoustic_criterion}
+
+    print(string.format('Loading duration model from: %s', opt.load_duration_model_path))
+    self.duration_model = torch.load(opt.load_duration_model_path)
+    print(string.format('Loading acoustic model from: %s', opt.load_acoustic_model_path))
+    self.acoustic_model = torch.load(opt.load_acoustic_model_path)
+    self.nets = {self.duration_model, self.acoustic_model}
+
+    self.duration_iterator = self:get_iterator(opt.batchsize, 'duration', 'test')
+    self.acoustic_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'test')
+
+    self.engine = self.tnt.SGDEngine()
+    self.engines = {self.engine}
+    self.meter = self.tnt.AverageValueMeter()
+
+    -- Hooks
+    self.engine.hooks.onStartEpoch = function(state)
+        self.meter:reset()
+    end
+    self.engine.hooks.onForwardCriterion = function(state)
+        self.meter:add(state.criterion.output)
+    end
+    self.engine.hooks.onEnd = function(state)
+        print(string.format('Loss: %2.4f', self.meter:value()))
+    end
+
+end
+
+function Network:test_duration(opt)
+    print('Testing duration model')
+    self.engine:test{
+        network = self.duration_model,
+        iterator = self.duration_iterator,
+        criterion = self.duration_criterion
+    }
+end
+
+function Network:test_acoustic(opt)
+    print('Testing acoustic model')
+    self.engine:test{
+        network = self.acoustic_model,
+        iterator = self.acoustic_iterator,
+        criterion = self.acoustic_criterion
+    }
+end
+
+function Network:create_wav_from_acoustic(opt)
+    -- Use the actual
+    -- Only test 
+    -- TODO: break out code from test_full_pipeline after "create input feature by stacking linguistic frames"
+end
+
+function Network:test_full_pipeline(opt)
+    print('Testing full pipeline')
+    -- Use outputs of duration model to create inputs for acoustic model
+    -- Save outputs of acoustic model in order to generate wav files
+
+    for sample in self.duration_iterator() do
+        -- Get phoneme durations for each item in sample (sample is a minibatch)
+        if opt.gpuid >= 0 then
+            sample.input = sample.input:cuda()
+            torch.setdefaulttensortype('torch.CudaTensor')
+        end
+        local output = self.duration_model:forward(sample.input)
+        local durations = {}
+        for i=1,output:size(2) do               -- batchsize
+            local item = output[{{},{i},{1}}]
+            local item_durations = {}           -- duration for each phoneme in item (i.e. sequence)
+            for j=1,item:size(1) do
+                table.insert(item_durations, item[j][1][1])
+            end
+            table.insert(durations, item_durations)
+        end
+
+        -- Get size of input feature tensor for acoustic model
+        -- First calculate the number of frames for each item
+        -- Sequence dimension is then the max number of frames
+        local function calc_num_frames_for_one_item(item_durations)
+            -- Round number of frames to closest integer
+            local phone_nframes = {}               -- number of frames per phoneme 
+            local total_nframes = 0
+            for i, duration in ipairs(item_durations) do
+                local n = round(duration / 0.005)
+                table.insert(phone_nframes, n)
+                total_nframes = total_nframes + n
+            end
+            return {phone_nframes, total_nframes}
+        end
+        local items_nframes = {}                    -- table of ints
+        local items_phone_nframes = {}              -- table of table of ints
+        local max_nframes = 0
+        for i,item_durations in ipairs(durations) do
+            local phone_nframes, total_nframes = unpack(calc_num_frames_for_one_item(item_durations))
+            table.insert(items_nframes, total_nframes)
+            table.insert(items_phone_nframes, phone_nframes)
+            if total_nframes > max_nframes then max_nframes = total_nframes end
+        end
+
+        -- Create input feature by stacking linguistic frames
+        local acoustic_input_features = torch.zeros(max_nframes, sample.input:size(2), sample.input:size(3))
+        for i=1,output:size(2) do                           -- batchsize
+            local item_frames = torch.zeros(max_nframes, 1, sample.input:size(3))
+            local item_phone_nframes = items_phone_nframes[i]
+            local cur_frame_idx = 1
+            for j, nframes in ipairs(item_phone_nframes) do
+                for k=1,nframes do                          -- stack
+                    local frame = sample.input[{{j},{i},{}}]
+                    frame[1][1][98] = k                     -- Set position of current frame
+                    item_frames[cur_frame_idx] = frame
+                    cur_frame_idx = cur_frame_idx + 1
+                end
+            end
+            acoustic_input_features[{{},{i},{}}] = item_frames
+        end
+
+        -- Pass features into acoustic_model and save
+        local output = self.acoustic_model:forward(acoustic_input_features)
+        for i, rec in ipairs(sample.rec) do
+            local item_output = torch.squeeze(output[{{1,items_nframes[i]}, {i}, {}}])  -- Remove batch dim
+            local f = hdf5.open(path.join(TEST_OUTPUTS_PATH, rec .. '.h5'), 'w')
+            f:write('data', item_output:double())
+            f:close()
+        end
+    end
+end
+------------------------------------------------------------------------------------------------
+-- USED BY BOTH TRAINING AND TESTING
+------------------------------------------------------------------------------------------------
 function Network:setup_gpu(opt)
     if opt.gpuid >= 0 then
         require 'cunn'
@@ -154,24 +320,31 @@ function Network:setup_gpu(opt)
         print(string.format('Using GPU %d', opt.gpuid))
         cutorch.setDevice((3 - opt.gpuid) + 1)
         cutorch.manualSeed(123)
+    end
+end
 
-        self.net = self.net:cuda()
-        self.criterion = self.criterion:cuda()
+function Network:move_to_gpu(opt)
+    if opt.gpuid >= 0 then
+        for i,net in ipairs(self.nets) do
+            net = net:cuda()
+        end
+
+        for i,criterion in ipairs(self.criterions) do
+            criterion = criterion:cuda()
+        end
+        -- self.net = self.net:cuda()
+        -- self.criterion = self.criterion:cuda()
 
         -- Copy sample to GPU buffer
         -- alternatively, this logic can be implemented via a TransformDataset
         local igpu, tgpu = torch.CudaTensor(), torch.CudaTensor()
-        self.engine.hooks.onSample = function(state)
-            igpu:resize(state.sample.input:size() ):copy(state.sample.input)
-            tgpu:resize(state.sample.target:size()):copy(state.sample.target)
-            state.sample.input  = igpu
-            state.sample.target = tgpu
-        end
-        self.valid_engine.hooks.onSample = function(state)
-            igpu:resize(state.sample.input:size() ):copy(state.sample.input)
-            tgpu:resize(state.sample.target:size()):copy(state.sample.target)
-            state.sample.input  = igpu
-            state.sample.target = tgpu
+        for i,engine in ipairs(self.engines) do
+            engine.hooks.onSample = function(state)
+                igpu:resize(state.sample.input:size() ):copy(state.sample.input)
+                tgpu:resize(state.sample.target:size()):copy(state.sample.target)
+                state.sample.input  = igpu
+                state.sample.target = tgpu
+            end
         end
     end
 end
@@ -214,23 +387,6 @@ function Network:get_iterator(batchsize, model, split)
             sample.target = target_padded:transpose(1,2)
             return sample
         end,
-    }
-end
-
-function Network:train(opt)
-    self.engine:train{
-        network   = self.net,
-        iterator  = self.train_iterator,
-        criterion = self.criterion,
-        optimMethod = self.optim_method,
-        config = {
-            learningRate = opt.lr,
-            learningRateDecay = opt.lr_decay,
-            momentum = opt.mom,
-            dampening = opt.damp,
-            nesterov = opt.nesterov,
-        },
-        maxepoch  = opt.maxepochs,
     }
 end
 

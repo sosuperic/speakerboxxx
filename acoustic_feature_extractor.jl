@@ -48,7 +48,6 @@ function save_acoustic_features(rec)
 	nframes = round(Int, ceil(utt_dur / (FRAME_EVERY_MS / 1000.0)))
 	println(nframes)
 
-
 	########################################################################################
 	# Read wav files and extract spectral features
 	########################################################################################
@@ -82,17 +81,21 @@ function save_acoustic_features(rec)
 	mc_ap = sp2mc(aperiodicity + 1e-10, order, α)
 
 	# To reconstruct
-	# approximate_spectrogram = mc2sp(mc, α, fftlen)
-	# approximate_aperiodicity = mc2sp(mc_ap, α, fftlen)
+	approximate_spectrogram = mc2sp(mc, α, fftlen)
+	approximate_aperiodicity = mc2sp(mc_ap, α, fftlen)
+	# wav_len =  round(Int, size(f0)[1] * fs * period / 1000)
+	# y = synthesis(f0, approximate_spectrogram, approximate_aperiodicity, period, fs, wav_len)
+	# wavwrite(y, "tmp.wav", Fs=fs)
 
+	# 53680 / 16000 / (5/ 1000) = 671
 	# println(size(x))				# (53680,)
-	# println(fs)						# 16000
+	# println(fs)					# 16000
 	# println(size(f0))				# (672,)
-	# println(size(spectrogram))		# (513,672)
+	# println(size(spectrogram))	# (513,672)
 	# println(size(aperiodicity))
 	# println(size(mc))
 	# println(size(mc_ap))			# (41,672)
-
+	# print(length(x))
 
 	########################################################################################
 	# Construct features and save

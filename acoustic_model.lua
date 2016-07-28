@@ -15,11 +15,11 @@ local feedforward = nn.Sequential()
 -- Recurrent layer
 local seq_lstm = nn.SeqLSTM(256, 256)
 seq_lstm.maskzero = true
--- local seq_lstm2 = nn.SeqLSTM(256, 256)
--- seq_lstm2.maskzero = true
+local seq_lstm2 = nn.SeqLSTM(256, 256)
+seq_lstm2.maskzero = true
 local rnn = nn.Sequential()
     :add(seq_lstm)
-    -- :add(seq_lstm2)
+    :add(seq_lstm2)
     -- :add(seq_lstm:clone())
 
 -- Post-recurrent layer

@@ -206,3 +206,30 @@ function ternary_op(condition, true_val, false_val)
     return false_val
   end
 end
+
+--------------------------------------------------------------------------------
+-- Reduce: use with a lambda
+-- e.g. sum all items by: table.reduce(phoneme_nframes, function(a,b) return a+b end)
+--------------------------------------------------------------------------------
+table.reduce = function(list, fn) 
+    local acc
+    for k, v in ipairs(list) do
+        if 1 == k then
+            acc = v
+        else
+            acc = fn(acc, v)
+        end 
+    end 
+    return acc 
+end
+
+--------------------------------------------------------------------------------
+-- TERNARY
+-- Example usage: local epochs = ternary_op(opt.use_google_model, 2, 3)
+--------------------------------------------------------------------------------
+function round(x)
+  if x%2 ~= 0.5 then
+    return math.floor(x+0.5)
+  end
+  return x-0.5
+end
