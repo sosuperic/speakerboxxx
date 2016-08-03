@@ -7,7 +7,7 @@ cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Example:')
 cmd:text('$ th main.lua -model duration -save_model_every_epoch 5')
-cmd:text('$ th main.lua -gpuid 1 -mode test -load_duration_model_path models/duration/2016_7_20___13_40_15/net_e50.t7 -load_acoustic_model_path models/acoustic/2016_7_20___11_22_4/net_e100.t7')
+cmd:text('$ th main.lua -gpuid 1 -mode test -load_duration_model_path models/duration/2016_7_20___13_40_15/net_e50.t7 -load_acoustic_model_path models/acoustic/2016_8_2___18_21_10/net_e30.t7')
 cmd:text('$ th main.lua -mode test -load_duration_model_path models/duration/2016_7_20___5_16_19/net_e9.t7 -load_acoustic_model_path models/acoustic/2016_7_20___14_30_32/net_e1.t7')
 cmd:text('Options:')
 -- Training, Testing
@@ -39,13 +39,14 @@ local opt = cmd:parse(arg)
 ---------------------------------------------------------------------------
 -- Training
 ---------------------------------------------------------------------------
-local network = require 'Network'
+local network = require 'network'
 network:init(opt)
 
 if opt.mode == 'train' then
     network:train(opt)
 elseif opt.mode == 'test' then
-    -- network:test_duration(opt)
-    -- network:test_acoustic(opt)
+    -- network:test_duration_loss(opt)
+    -- network:test_acoustic_loss(opt)
+    network:test_acoustic_params(opt)
     network:test_full_pipeline(opt)
 end

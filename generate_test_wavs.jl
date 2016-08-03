@@ -4,31 +4,39 @@ using WAV
 using WORLD
 using HDF5
 
-using PyCall
-matplotlib = pyimport("matplotlib")
-PyDict(matplotlib["rcParams"])["figure.figsize"] = (12, 5)
-using PyPlot
+# using PyCall
+# matplotlib = pyimport("matplotlib")
+# PyDict(matplotlib["rcParams"])["figure.figsize"] = (12, 5)
+# using PyPlot
 
-using Images
+# using Images
 
-SPECTRAL_PARAMS_PATH = "outputs/spectral/"
+# SPECTRAL_PARAMS_PATH = "outputs/spectral/acoustic_only"
+SPECTRAL_PARAMS_PATH = "outputs/spectral/full_pipeline"
 OUTPUTS_WAV_PATH = "outputs/wav"
 
+mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "mean.h5"), "data")               # (time, features (84))
+stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "stddev.h5"), "data")
+
 function generate_and_save_wav(rec_fn, i)
-    rec_fn = "arctic_a0120.h5"
+    # rec_fn = "arctic_a0120.h5"
     println(i)
-    if i == 33 || i == 35 || i == 74
+    if i == 1 || i == 2 || i == 5 || i == 74
         return
     end
     rec = splitext(rec_fn)[1]
     println(rec)
     fp = joinpath(SPECTRAL_PARAMS_PATH, rec_fn)
-    data = h5read(fp, "data")               # (time, features (84))
-    data = transpose(data)
+    data = h5read(fp, "data")               
+    data = transpose(data)                  # (time, features (84))
+
+    for i=2:size(data)[2]                  # features
+        data[1:end, i] += mean[i-1]
+    end
 
     voiced = data[1:end,1]
     log_f0  = data[1:end,2]
-    f0 = 10.^(log_f0 - 1e-10)                # (381,)        NOTE the eps
+    f0 = 10.^(log_f0 - 1e-10)               # (381,)        NOTE the eps
     sp_mc = data[1:end, 3:3+(41-1)]         # (381, 41)
     ap_mc = data[1:end, 3+41:end]           # (381, 41)
 
@@ -80,6 +88,9 @@ end
 recs = readdir(SPECTRAL_PARAMS_PATH)
 i = 1
 for rec_fn in recs
+    if rec_fn == ".DS_Store"
+        continue
+    end
     generate_and_save_wav(rec_fn, i)
     i += 1
 end

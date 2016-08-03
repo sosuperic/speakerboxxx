@@ -7,6 +7,8 @@ require 'pl'
 local tnt = require 'torchnet'
 
 local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs/'
+-- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/'
+-- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean/'
 local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets/'
 local DURATION_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/duration_targets/'
 local SPLIT_PATH = 'data/processed/'
@@ -79,6 +81,7 @@ function AcousticDataset:get(idx)
 	-- Get number of frames for each phoneme
 	-- Make sure we match the actual total number of frames. Handle the last phoneme speciallys
 	local acoustic_target = load_hdf5_array(self.acoustic_target_fps[idx], 'y')
+
 	local total_nframes = acoustic_target:size(1)
 
 	local phoneme_durations = load_hdf5_array(self.duration_target_fps[idx], 'y')
@@ -98,7 +101,7 @@ function AcousticDataset:get(idx)
 		-- print(dur, tmp_old_plus_minus, dur_plus_minus, n)
 		table.insert(phoneme_nframes, n)
 	end
-	
+
 	-- Stack according to the number of frames per phoneme calculated above
 	-- Split into second for loop here forc clarity
 	local input = torch.Tensor(total_nframes, x:size(2))

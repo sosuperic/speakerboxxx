@@ -7,8 +7,6 @@ require 'csvigo'
 require 'utils.lua_utils'
 require 'hdf5'
 
-TEST_OUTPUTS_PATH = 'outputs/spectral/'
-
 local Network = {}
 
 function Network:init(opt)
@@ -40,20 +38,25 @@ function Network:setup_model(opt)
 
     if opt.model == 'duration' then
         local net, criterion = unpack(require 'duration_model')
-        self.net = net
-        self.criterion = criterion
+        self.nets = {net}
+        self.criterions = {criterion}
         self.model = 'duration'
         self.train_iterator = self:get_iterator(opt.batchsize, 'duration', split)
         self.valid_iterator = self:get_iterator(opt.batchsize, 'duration', 'valid')
     elseif opt.model == 'acoustic' then
         local net, criterion = unpack(require 'acoustic_model')
-        self.net = net
+        self.nets = {net}
         -- torch.save('models/acoustic/2016_7_20___14_30_32/net_e1.t7', net)
         -- os.exit()
-        self.criterion = criterion
+        self.criterions = {criterion}
         self.model = 'acoustic'
         self.train_iterator = self:get_iterator(opt.batchsize, 'acoustic', split)
         self.valid_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'valid')
+
+        -- for sample in self.train_iterator() do
+        --     print(sample)
+        --     os.exit()
+        -- end
     else
         print('model must be duration or acoustic')
         os.exit()
@@ -90,9 +93,9 @@ function Network:setup_train_engine(opt)
         -- Get loss on validation
         print('Getting validation loss')
         self.valid_engine:test{
-            network   = self.net,
+            network   = self.nets[1],
             iterator  = self.valid_iterator,
-            criterion = self.criterion
+            criterion = self.criterions[1]
         }
         local train_loss = self.train_meter:value()
         local valid_loss = self.valid_meter:value()
@@ -151,7 +154,7 @@ end
 function Network:save_network(fn)
     local fp = path.join(self.save_path, fn)
     print(string.format('Saving model to: %s', fp))
-    torch.save(fp, self.net)
+    torch.save(fp, self.nets[1])
 end
 
 
@@ -163,9 +166,9 @@ end
 
 function Network:train(opt)
     self.engine:train{
-        network   = self.net,
+        network   = self.nets[1],
         iterator  = self.train_iterator,
-        criterion = self.criterion,
+        criterion = self.criterions[1],
         optimMethod = self.optim_method,
         config = {
             learningRate = opt.lr,
@@ -182,7 +185,7 @@ end
 -- TESTING
 ------------------------------------------------------------------------------------------------
 function Network:setup_test(opt)
-    n, self.duration_criterion = unpack(require 'duration_model')
+    _, self.duration_criterion = unpack(require 'duration_model')
     _, self.acoustic_criterion = unpack(require 'acoustic_model')
     self.criterions = {self.duration_criterion, self.acoustic_criterion}
 
@@ -212,7 +215,7 @@ function Network:setup_test(opt)
 
 end
 
-function Network:test_duration(opt)
+function Network:test_duration_loss(opt)
     print('Testing duration model')
     self.engine:test{
         network = self.duration_model,
@@ -221,7 +224,7 @@ function Network:test_duration(opt)
     }
 end
 
-function Network:test_acoustic(opt)
+function Network:test_acoustic_loss(opt)
     print('Testing acoustic model')
     self.engine:test{
         network = self.acoustic_model,
@@ -230,14 +233,25 @@ function Network:test_acoustic(opt)
     }
 end
 
-function Network:create_wav_from_acoustic(opt)
-    -- Use the actual
-    -- Only test 
-    -- TODO: break out code from test_full_pipeline after "create input feature by stacking linguistic frames"
+function Network:test_acoustic_params(opt)
+    print('Generating spectral params using only acoustic model')
+    for sample in self.acoustic_iterator() do
+        if opt.gpuid >= 0 then
+            sample.input = sample.input:cuda()
+            torch.setdefaulttensortype('torch.CudaTensor')
+        end
+        local output = self.acoustic_model:forward(sample.input)
+        for i, rec in ipairs(sample.rec) do
+            local item_output = torch.squeeze(output[{{1,sample.input:size(1)}, {i}, {}}])  -- Remove batch dim
+            local f = hdf5.open(path.join(opt.save_test_dir, 'acoustic_only', rec .. '.h5'), 'w')
+            f:write('data', item_output:double())
+            f:close()
+        end
+    end
 end
 
 function Network:test_full_pipeline(opt)
-    print('Testing full pipeline')
+    print('Testing full pipeline - duration plus acoustic')
     -- Use outputs of duration model to create inputs for acoustic model
     -- Save outputs of acoustic model in order to generate wav files
 
@@ -302,8 +316,9 @@ function Network:test_full_pipeline(opt)
         -- Pass features into acoustic_model and save
         local output = self.acoustic_model:forward(acoustic_input_features)
         for i, rec in ipairs(sample.rec) do
+            print('Saving ' .. rec)
             local item_output = torch.squeeze(output[{{1,items_nframes[i]}, {i}, {}}])  -- Remove batch dim
-            local f = hdf5.open(path.join(TEST_OUTPUTS_PATH, rec .. '.h5'), 'w')
+            local f = hdf5.open(path.join(opt.save_test_dir, 'full_pipeline', rec .. '.h5'), 'w')
             f:write('data', item_output:double())
             f:close()
         end

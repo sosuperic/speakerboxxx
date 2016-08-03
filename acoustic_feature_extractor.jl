@@ -7,11 +7,14 @@ using HDF5
 WAV_PATH = "data/cmu_us_slt_arctic/wav/"
 PHONEME_LABELS_PATH = "data/cmu_us_slt_arctic/lab/"
 LINGUISTIC_INPUTS_PATH = "data/processed/cmu_us_slt_arctic/linguistic_inputs/"
-ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets/"
+# ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets/"
+# ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean"
+ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_normalized"
 FRAME_EVERY_MS = 5.0 		# extract frame every 5 ms
 
+NORMALIZE = true			# zero-mean, unit-variance.
 
-function save_acoustic_features(rec)
+function calc_acoustic_features(rec)
 	println(rec)
 	########################################################################################
 	### Get the start time and utterance duration in order to cut out the relevant
@@ -33,9 +36,9 @@ function save_acoustic_features(rec)
 		end
 	end
 	close(f)
-	println(start_time)
+	# println(start_time)
 	start_frame = round(Int, floor(start_time / (FRAME_EVERY_MS / 1000.0)))
-	println(start_frame)
+	# println(start_frame)
 
 	### Get utterance duration from linguistic_inputs/*.h5 files
 	# These were calculated in _save_phoneme_durations of feature_extractor.py
@@ -44,9 +47,9 @@ function save_acoustic_features(rec)
 	data = h5read(joinpath(LINGUISTIC_INPUTS_PATH, "$rec.h5"), "x")	# (98, #phonemes)
 	# println(size(data))
 	utt_dur = data[97][1]
-	println(utt_dur)
+	# println(utt_dur)
 	nframes = round(Int, ceil(utt_dur / (FRAME_EVERY_MS / 1000.0)))
-	println(nframes)
+	# println(nframes)
 
 	########################################################################################
 	# Read wav files and extract spectral features
@@ -80,9 +83,23 @@ function save_acoustic_features(rec)
 	mc = sp2mc(spectrogram + 1e-10, order, α)			# Need eps otherwise NaNs
 	mc_ap = sp2mc(aperiodicity + 1e-10, order, α)
 
+	# println("f0")
+	# println(log10(f0 + 1e-10)[100])
+	# println(log10(f0 + 1e-10)[200])
+	# println(log10(f0 + 1e-10)[300])
+	# println("mc")
+	# println(mc[1:end, 100])
+	# println(mc[1:end, 200])
+	# println(mc[1:end, 300])
+	# println("mc_ap")
+	# println(mc_ap[1:end, 100])
+	# println(mc_ap[1:end, 200])
+	# println(mc_ap[1:end, 300])
+	# quit()
+
 	# To reconstruct
-	approximate_spectrogram = mc2sp(mc, α, fftlen)
-	approximate_aperiodicity = mc2sp(mc_ap, α, fftlen)
+	# approximate_spectrogram = mc2sp(mc, α, fftlen)
+	# approximate_aperiodicity = mc2sp(mc_ap, α, fftlen)
 	# wav_len =  round(Int, size(f0)[1] * fs * period / 1000)
 	# y = synthesis(f0, approximate_spectrogram, approximate_aperiodicity, period, fs, wav_len)
 	# wavwrite(y, "tmp.wav", Fs=fs)
@@ -113,21 +130,77 @@ function save_acoustic_features(rec)
 		end
 		frame[1] = voiced
 		frame[2] = log10(f0[i] + 1e-10)		# Some are 0 so add eps
-		frame[3:3+(41-1)] = mc[:,1]
-		frame[3+41:end] = mc_ap[:,1]
+		frame[3:3+(41-1)] = mc[:,i]
+		frame[3+41:end] = mc_ap[:,i]
 		features[i - start_frame + 1,:] = frame
 	end
 	println(size(features))	# (573. 84), i.e. (# time-steps, feature size)
 
-	# However, it seems numpy and julia arrays are transposed.
-	# In order to get (573, 84) when reading from numpy, must transpose
-
-	h5write(joinpath(ACOUSTIC_TARGETS_PATH, "$rec.h5"), "y", transpose(features))
+	return features
 end
 
+# https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#On-line_algorithm
+function get_mean_and_std()
+	recs = readdir(WAV_PATH)
 
-recs = readdir(WAV_PATH)
-for rec_fn in recs
-	rec = replace(rec_fn, ".wav", "")
-	save_acoustic_features(rec)
+	n = 0
+	mean = zeros(83)					# Normalize each feature, exlcuding voiced
+	M2 = zeros(83)
+	for rec_fn in recs
+		rec = replace(rec_fn, ".wav", "")
+		features = calc_acoustic_features(rec)
+
+		cur_n = n
+		for i=2:size(features)[2]				# Normalize each feature, excluding voiced
+			cur_n = n
+			for j=1:size(features)[1]			# For each time step
+				cur_n += 1
+				delta = features[j,i] - mean[i-1]
+				mean[i-1] += delta / cur_n
+				M2[i-1] += delta * (features[j,i] - mean[i-1])
+			end
+		end
+		n = cur_n
+		println(mean)
+		# println(M2)
+	end
+	var = M2 / (n-1)
+	stddev = sqrt(var)
+	return mean, stddev
 end
+
+function save_acoustic_features()
+	if NORMALIZE
+		mean, stddev = get_mean_and_std()
+		println(mean)
+		println(stddev)
+		h5write(joinpath(ACOUSTIC_TARGETS_PATH, "mean.h5"), "data", mean)
+		h5write(joinpath(ACOUSTIC_TARGETS_PATH, "stddev.h5"), "data", stddev)
+	end
+
+	# mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "mean.h5"), "data")               # (time, features (84))
+	# stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "stddev.h5"), "data")
+
+	# TODO: nan because dividing by stddev = 0?
+	# TODO: dividing by stddev is making values very large, loss very big
+
+	recs = readdir(WAV_PATH)
+	for rec_fn in recs
+		rec = replace(rec_fn, ".wav", "")
+		features = calc_acoustic_features(rec)
+		if NORMALIZE
+			for j=2:size(features)[2] 				# Each feature to be normalized
+				features[1:end,j] -= mean[j-1]
+				# features[1:end,j] /= stddev[j-1]
+			end
+		end
+
+		# However, it seems numpy is row-major while julia is column-major
+		# In order to get (573, 84) when reading from numpy, must transpose
+		features = transpose(features)
+		h5write(joinpath(ACOUSTIC_TARGETS_PATH, "$rec.h5"), "y", features)
+	end
+end
+
+# Main
+save_acoustic_features()
