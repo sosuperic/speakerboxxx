@@ -5,13 +5,13 @@ require 'nn'
 
 -- Pre-reurrent layer
 local feedforward = nn.Sequential()
-    :add(nn.Linear(98, 256))
+    :add(nn.Linear(254, 512))
     :add(nn.ReLU())
     :add(nn.Dropout(0.5))
-    :add(nn.Linear(256, 256))
+    :add(nn.Linear(512, 512))
     :add(nn.ReLU())
     :add(nn.Dropout(0.5))
-    :add(nn.Linear(256, 256))
+    :add(nn.Linear(512, 256))
     :add(nn.ReLU())
     :add(nn.Dropout(0.5))
 

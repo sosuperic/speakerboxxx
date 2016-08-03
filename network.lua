@@ -30,7 +30,8 @@ function Network:setup_model(opt)
         adam = optim.adam,
         adagrad = optim.adagrad,
         adadelta = optim.adadelta,
-        rmsprop = optim.rmsprop
+        rmsprop = optim.rmsprop,
+        adamax = optim.adamax
     }
     self.optim_method = method[opt.method]
 
@@ -306,6 +307,9 @@ function Network:test_full_pipeline(opt)
                 for k=1,nframes do                          -- stack
                     local frame = sample.input[{{j},{i},{}}]
                     frame[1][1][98] = k                     -- Set position of current frame
+                    if cur_frame_idx > item_frames:size(1) then
+                        break
+                    end
                     item_frames[cur_frame_idx] = frame
                     cur_frame_idx = cur_frame_idx + 1
                 end

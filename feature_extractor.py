@@ -4,7 +4,8 @@ WAVS_PATH = 'data/cmu_us_slt_arctic/wav/'
 PHONE_LABELS_PATH = 'data/cmu_us_slt_arctic/lab/'
 TRANSCRIPTS_PATH = 'data/cmuarctic.data.txt'
 
-LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs'
+# LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs'
+LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus'
 ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets'
 DURATION_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/duration_targets'
 
@@ -258,6 +259,7 @@ class FeatureExtractor:
                 ...
             )
         """
+        print('Creating word-phone-time contexts')
         rec_word_phone_times = []
 
         lines = tuple(open(TRANSCRIPTS_PATH, 'r'))
@@ -357,7 +359,8 @@ class FeatureExtractor:
         Sets
         ----
         ('charged', 'CH', '2.32450'), -> ('charged', ['CH', 'AA', 'R', 'JH', 'D'], 'CH', '2.32450')
-        """ 
+        """
+        print('Adding syllable to context')
         for i in range(len(self.rec_phone_contexts)):
             rec, word_phone_times = self.rec_phone_contexts[i]
             word_syllable_phone_times = []
@@ -423,6 +426,7 @@ class FeatureExtractor:
         ----
         ('charged', ['CH', 'AA', 'R', 'JH', 'D'], 'CH', '2.32450') -> ('VBD', charged', ['CH', 'AA', 'R', 'JH', 'D'], 'CH', '2.32450')
         """
+        print('Adding POS to context')
         tagged = {}
         for i in range(len(self.rec_phone_contexts)):
             print 'pos', i
@@ -451,9 +455,9 @@ class FeatureExtractor:
         Features
         --------
         Categorical:
-        - [x] phoneme identity
-        - [x] POS identity
-        - [x] vowel phoneme in current syllable
+        - [x] quinphone identity: 39 * 5
+        - [x] POS identity: 12
+        - [x] vowel phoneme in current syllable: 39
 
         Position
         --------
@@ -474,10 +478,10 @@ class FeatureExtractor:
             - Unidirectional: coarse-coded position of the current frame in the current phoneme,
             - MSFT: position of the current frame of the current phone
         """
-
+        print('Creating linguistic features')
         # pprint.pprint(self.rec_phone_contexts)
         # pprint.pprint(self.rec_phone_durations)
-        feature_size = 2*len(self.phoneset) + len(self.universal_tagset) + 8    # Leave extra bit for frame position?
+        feature_size = 6*len(self.phoneset) + len(self.universal_tagset) + 8    # leave extra bit for frame position
         for i in range(len(self.rec_phone_contexts)):
             rec, contexts = self.rec_phone_contexts[i]
             w_in_utt_idx = 0
@@ -489,8 +493,19 @@ class FeatureExtractor:
                 tag, word, syl, phone, time = contexts[j]
 
                 # Categorical
-                phone_encoded = np.zeros(len(self.phoneset))
-                phone_encoded[self.phoneset_to_idx[phone]] = 1
+                quinphone_encoded = np.zeros(5 * len(self.phoneset))
+                q_indices = range(j-2, j+3)                                     # window of 2 phonemes before and after
+                q_phones = []
+                for window_idx, q_idx in enumerate(q_indices):
+                    if q_idx < 0 or q_idx >= len(contexts):                     # out of range
+                        continue
+                    q_phone = contexts[q_idx][3]                                # tag, word, syl, phone, time
+                    q_phone_idx = self.phoneset_to_idx[q_phone]
+                    q_phone_encoded = np.zeros(len(self.phoneset))
+                    q_phone_encoded[q_phone_idx] = 1
+                    quinphone_encoded[window_idx * len(self.phoneset): (window_idx + 1) * len(self.phoneset)] = q_phone_encoded
+                    q_phones.append(q_phone)
+                print(q_phones)
                 
                 tag_encoded = np.zeros(len(self.universal_tagset))
                 tag_encoded[self.universal_tagset_to_idx[tag]] = 1
@@ -521,7 +536,7 @@ class FeatureExtractor:
 
                 # Concatenate
                 frame_features = np.hstack([
-                    phone_encoded,
+                    quinphone_encoded,
                     tag_encoded,
                     syl_vowel_encoded,
                     pos_p_in_syl,

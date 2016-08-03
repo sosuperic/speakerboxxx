@@ -21,7 +21,7 @@ stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_norm
 function generate_and_save_wav(rec_fn, i)
     # rec_fn = "arctic_a0120.h5"
     println(i)
-    if i == 1 || i == 2 || i == 5 || i == 74
+    if i == 1 || i == 2 || i == 4 || i == 5 || i == 74
         return
     end
     rec = splitext(rec_fn)[1]
@@ -30,9 +30,10 @@ function generate_and_save_wav(rec_fn, i)
     data = h5read(fp, "data")               
     data = transpose(data)                  # (time, features (84))
 
-    for i=2:size(data)[2]                  # features
-        data[1:end, i] += mean[i-1]
-    end
+    # for i=2:size(data)[2]                  # features
+    #     data[1:end, i] *= stddev[i-1]
+    #     data[1:end, i] += mean[i-1]
+    # end
 
     voiced = data[1:end,1]
     log_f0  = data[1:end,2]
