@@ -30,6 +30,7 @@ function generate_and_save_wav(rec_fn, i)
     data = h5read(fp, "data")               
     data = transpose(data)                  # (time, features (84))
 
+    # Restore mean stddev
     # for i=2:size(data)[2]                  # features
     #     data[1:end, i] *= stddev[i-1]
     #     data[1:end, i] += mean[i-1]
@@ -38,6 +39,14 @@ function generate_and_save_wav(rec_fn, i)
     voiced = data[1:end,1]
     log_f0  = data[1:end,2]
     f0 = 10.^(log_f0 - 1e-10)               # (381,)        NOTE the eps
+    
+    # Silence if voiced flag is 1
+    for i=1:size(voiced)[1]
+        if voiced[i] < 0.25
+            f0[i] = 0.0
+        end
+    end
+
     sp_mc = data[1:end, 3:3+(41-1)]         # (381, 41)
     ap_mc = data[1:end, 3+41:end]           # (381, 41)
 

@@ -7,14 +7,15 @@ using HDF5
 WAV_PATH = "data/cmu_us_slt_arctic/wav/"
 PHONEME_LABELS_PATH = "data/cmu_us_slt_arctic/lab/"
 LINGUISTIC_INPUTS_PATH = "data/processed/cmu_us_slt_arctic/linguistic_inputs/"
-# ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets/"
+ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate/"
 # ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean"
-ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_normalized"
+# ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_normalized"
 FRAME_EVERY_MS = 5.0 		# extract frame every 5 ms
 
-NORMALIZE = true			# zero-mean, unit-variance.
+NORMALIZE = false			# zero-mean, unit-variance.
 
 function calc_acoustic_features(rec)
+	# rec = "arctic_a0112"
 	println(rec)
 	########################################################################################
 	### Get the start time and utterance duration in order to cut out the relevant
@@ -134,6 +135,45 @@ function calc_acoustic_features(rec)
 		frame[3+41:end] = mc_ap[:,i]
 		features[i - start_frame + 1,:] = frame
 	end
+
+	# Linearly interpolate F0 - if unvoiced, take average of prev and next
+	prev_voiced_f0 = Inf16
+	next_voiced_f0 = Inf16
+	for i=1:size(features)[1]
+		if features[i,1] == 0				# Not voiced
+			if prev_voiced_f0 == Inf16		# Get next voiced F0
+				j = i
+				future_voiced = features[j,1]
+				while future_voiced == 0
+					j += 1
+					future_voiced = features[j,1]
+				end
+				f0 = features[j,2]
+				features[i,2] = f0
+				prev_voiced_f0 = f0			# This will help redundant lookaheads, e.g. start of seq is notvoiced, notvoiced, notvoiced...
+			else
+				if next_voiced_f0 == Inf16
+					j = i
+					future_voiced = features[j,1]
+					while future_voiced == 0
+						j += 1
+						if j > size(features)[1]	# At end
+							break
+						end	
+						future_voiced = features[j,1]
+					end
+					if j > size(features)[1]		# At end, just use previous
+						next_voiced_f0 = prev_voiced_f0
+					else
+						next_voiced_f0 = features[j,2]
+					end
+				end
+				features[i,2] = (prev_voiced_f0 + next_voiced_f0) * 0.5
+			end
+		else
+			prev_voiced_f0 = features[i,2]
+		end
+	end
 	println(size(features))	# (573. 84), i.e. (# time-steps, feature size)
 
 	return features
@@ -181,9 +221,6 @@ function save_acoustic_features()
 	# mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "mean.h5"), "data")               # (time, features (84))
 	# stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "stddev.h5"), "data")
 
-	# TODO: nan because dividing by stddev = 0?
-	# TODO: dividing by stddev is making values very large, loss very big
-
 	recs = readdir(WAV_PATH)
 	for rec_fn in recs
 		rec = replace(rec_fn, ".wav", "")
@@ -191,7 +228,7 @@ function save_acoustic_features()
 		if NORMALIZE
 			for j=2:size(features)[2] 				# Each feature to be normalized
 				features[1:end,j] -= mean[j-1]
-				# features[1:end,j] /= stddev[j-1]
+				features[1:end,j] /= stddev[j-1]
 			end
 		end
 

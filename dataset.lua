@@ -8,9 +8,10 @@ local tnt = require 'torchnet'
 
 -- local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs/'
 local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/'
-local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/'
+-- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/'
 -- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean/'
 -- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets/'
+local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate/'
 local DURATION_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/duration_targets/'
 local SPLIT_PATH = 'data/processed/'
 
