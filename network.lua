@@ -42,17 +42,20 @@ function Network:setup_model(opt)
         self.nets = {net}
         self.criterions = {criterion}
         self.model = 'duration'
-        self.train_iterator = self:get_iterator(opt.batchsize, 'duration', split)
-        self.valid_iterator = self:get_iterator(opt.batchsize, 'duration', 'valid')
+        self.train_iterator = self:get_iterator(opt.batchsize, 'duration', split, opt.two_datasets)
+        self.valid_iterator = self:get_iterator(opt.batchsize, 'duration', 'valid', opt.two_datasets)
+
+        -- for sample in self.train_iterator() do
+        --     print(sample)
+        --     os.exit()
+        -- end
     elseif opt.model == 'acoustic' then
-        local net, criterion = unpack(require 'acoustic_model')
+        local net, criterion = unpack(require 'acoustic_model' )
         self.nets = {net}
-        -- torch.save('models/acoustic/2016_7_20___14_30_32/net_e1.t7', net)
-        -- os.exit()
         self.criterions = {criterion}
         self.model = 'acoustic'
-        self.train_iterator = self:get_iterator(opt.batchsize, 'acoustic', split)
-        self.valid_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'valid')
+        self.train_iterator = self:get_iterator(opt.batchsize, 'acoustic', split, opt.two_datasets)
+        self.valid_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'valid', opt.two_datasets)
 
         -- for sample in self.train_iterator() do
         --     print(sample)
@@ -196,9 +199,6 @@ function Network:setup_test(opt)
     self.acoustic_model = torch.load(opt.load_acoustic_model_path)
     self.nets = {self.duration_model, self.acoustic_model}
 
-    self.duration_iterator = self:get_iterator(opt.batchsize, 'duration', 'test')
-    self.acoustic_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'test')
-
     self.engine = self.tnt.SGDEngine()
     self.engines = {self.engine}
     self.meter = self.tnt.AverageValueMeter()
@@ -213,14 +213,13 @@ function Network:setup_test(opt)
     self.engine.hooks.onEnd = function(state)
         print(string.format('Loss: %2.4f', self.meter:value()))
     end
-
 end
 
 function Network:test_duration_loss(opt)
     print('Testing duration model')
     self.engine:test{
         network = self.duration_model,
-        iterator = self.duration_iterator,
+        iterator = self:get_iterator(opt.batchsize, 'duration', 'test', opt.two_datasets),
         criterion = self.duration_criterion
     }
 end
@@ -229,13 +228,14 @@ function Network:test_acoustic_loss(opt)
     print('Testing acoustic model')
     self.engine:test{
         network = self.acoustic_model,
-        iterator = self.acoustic_iterator,
+        iterator = self:get_iterator(opt.batchsize, 'acoustic', 'test', opt.two_datasets),
         criterion = self.acoustic_criterion
     }
 end
 
 function Network:test_acoustic_params(opt)
     print('Generating spectral params using only acoustic model')
+    self.acoustic_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'test', false)
     for sample in self.acoustic_iterator() do
         if opt.gpuid >= 0 then
             sample.input = sample.input:cuda()
@@ -252,6 +252,7 @@ function Network:test_acoustic_params(opt)
 end
 
 function Network:test_full_pipeline(opt)
+    self.duration_iterator = self:get_iterator(opt.batchsize, 'duration', 'test', false)
     print('Testing full pipeline - duration plus acoustic')
     -- Use outputs of duration model to create inputs for acoustic model
     -- Save outputs of acoustic model in order to generate wav files
@@ -351,8 +352,6 @@ function Network:move_to_gpu(opt)
         for i,criterion in ipairs(self.criterions) do
             criterion = criterion:cuda()
         end
-        -- self.net = self.net:cuda()
-        -- self.criterion = self.criterion:cuda()
 
         -- Copy sample to GPU buffer
         -- alternatively, this logic can be implemented via a TransformDataset
@@ -368,7 +367,7 @@ function Network:move_to_gpu(opt)
     end
 end
 
-function Network:get_iterator(batchsize, model, split)
+function Network:get_iterator(batchsize, model, split, two_datasets)
     return self.tnt.ParallelDatasetIterator{
         nthread = 1,
         closure = function()
@@ -377,21 +376,30 @@ function Network:get_iterator(batchsize, model, split)
         -- Requiring packages at the start of this file won't be visible to this thread
             local tnt = require 'torchnet'
             require 'dataset'
-            local dataset 
+            local dataset
             if model == 'duration' then
-                dataset = tnt.DurationDataset(split)
+                dataset = tnt.DurationDataset(split, two_datasets)
             elseif model == 'acoustic' then
-                dataset = tnt.AcousticDataset(split)
+                dataset = tnt.AcousticDataset(split, two_datasets)
             end
 
             return tnt.BatchDataset{
                 batchsize = batchsize,
                 dataset = dataset,
+                -- merge = function(array_of_tensors)
+                --     -- print(array_of_tensors)
+                --     -- print(array_of_tensors[1])
+                --     -- print(#array_of_tensors)
+                --     -- os.exit()
+                --     return array_of_teensors
+                -- end,
             }
         end,
         transform = function(sample)
+            -- print('transform', sample)
+            -- os.exit()
             local max_seq_len = 0
-            for i=1,#sample.input do
+            for i=1,#sample.target do
                 if sample.input[i]:size(1) > max_seq_len then
                     max_seq_len = sample.input[i]:size(1)
                 end

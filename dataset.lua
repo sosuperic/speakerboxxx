@@ -6,14 +6,18 @@ require 'hdf5'
 require 'pl'
 local tnt = require 'torchnet'
 
+local SPLIT_PATH = 'data/processed/'
 -- local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs/'
-local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/'
+local LINGUISTIC_INPUTS_PATH1 = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/'
+local LINGUISTIC_INPUTS_PATH2 = 'data/processed/cmu_us_clb_arctic/linguistic_inputs_plus/'
 -- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/'
 -- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean/'
 -- local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets/'
-local ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate/'
-local DURATION_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/duration_targets/'
-local SPLIT_PATH = 'data/processed/'
+local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate/'
+local ACOUSTIC_TARGETS_PATH2 = 'data/processed/cmu_us_clb_arctic/acoustic_targets_f0interpolate/'
+local DURATION_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/duration_targets/'
+local DURATION_TARGETS_PATH2 = 'data/processed/cmu_us_clb_arctic/duration_targets/'
+
 
 ----------------------------------------------------------------------------------------------------------------
 -- Helper Functions
@@ -32,15 +36,23 @@ local function load_hdf5_array(path, name)
 	return data
 end
 
-----------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------- --------------------------------------------
 -- Duration model dataset loader
 ----------------------------------------------------------------------------------------------------------------
 local DurationDataset, Dataset = torch.class('tnt.DurationDataset', 'tnt.Dataset', tnt)
 
-function DurationDataset:__init(split)
+function DurationDataset:__init(split, two_datasets)
 	self.recs = lines_from(path.join(SPLIT_PATH, 'duration', split .. '.txt'))
-	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH, self.recs)
-	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH, self.recs)
+	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH1, self.recs)
+	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH1, self.recs)
+
+	if two_datasets then
+		self.linguistic_input_fps = interleaf_tables(self.linguistic_input_fps,
+			create_full_path(LINGUISTIC_INPUTS_PATH2, self.recs))
+		self.duration_target_fps = interleaf_tables(self.duration_target_fps,
+			create_full_path(DURATION_TARGETS_PATH2, self.recs))
+	end
+
 	self.n = #self.linguistic_input_fps
 end
 
@@ -62,11 +74,22 @@ end
 ----------------------------------------------------------------------------------------------------------------
 local AcousticDataset, Dataset = torch.class('tnt.AcousticDataset', 'tnt.Dataset', tnt)
 
-function AcousticDataset:__init(split)
+function AcousticDataset:__init(split, two_datasets)
 	self.recs = lines_from(path.join(SPLIT_PATH, 'acoustic', split .. '.txt'))
-	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH, self.recs)
-	self.acoustic_target_fps = create_full_path(ACOUSTIC_TARGETS_PATH, self.recs)
-	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH, self.recs)
+
+	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH1, self.recs)
+	self.acoustic_target_fps = create_full_path(ACOUSTIC_TARGETS_PATH1, self.recs)
+	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH1, self.recs)
+
+	if two_datasets then
+		self.linguistic_input_fps = interleaf_tables(self.linguistic_input_fps,
+			create_full_path(LINGUISTIC_INPUTS_PATH2, self.recs))
+		self.acoustic_target_fps = interleaf_tables(self.acoustic_target_fps,
+			create_full_path(ACOUSTIC_TARGETS_PATH2, self.recs))
+		self.duration_target_fps = interleaf_tables(self.duration_target_fps,
+			create_full_path(DURATION_TARGETS_PATH2, self.recs))
+	end
+
 	self.n = #self.linguistic_input_fps
 end
 

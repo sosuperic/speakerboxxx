@@ -7,6 +7,11 @@ require 'hdf5'
 require 'utils.lua_utils'
 
 local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs/'
+local UTT_DUR_IDX = 97
+-- local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/'
+-- local UTT_DUR_IDX = 253
+
+
 local OUT_PATH = 'data/processed/'
 
 local NUM_VALID = 100
@@ -29,7 +34,7 @@ for i, fn in ipairs(files) do
 	-- We sort so we can do curriculum learning
 	local x = load_hdf5_array(path.join(LINGUISTIC_INPUTS_PATH, fn), 'x')
 	local duration_seq_len = x:size(1)
-	local acoustic_seq_len = x[1][97] 		-- Second to last feature is total time of sequence
+	local acoustic_seq_len = x[1][UTT_DUR_IDX] 		-- Second to last feature is total time of sequence
 
 	if i <= NUM_VALID then table.insert(va, {rec, duration_seq_len, acoustic_seq_len})
 	elseif (i > NUM_VALID and (i <= NUM_VALID + NUM_TEST)) then table.insert(te, {rec, duration_seq_len, acoustic_seq_len})

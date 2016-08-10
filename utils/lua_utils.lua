@@ -162,6 +162,32 @@ function size_of_table(t)
   end
   return count
 end
+--------------------------------------------------------------------------------
+-- INTERLEAF TWO TABLES
+--------------------------------------------------------------------------------
+function interleaf_tables(t1, t2)
+  local interleafed = {}
+  local i = 1
+  local j = 1
+  while (i <= #t1) and (j <= #t2) do
+    table.insert(interleafed, t1[i])
+    table.insert(interleafed, t2[j])
+    i = i + 1
+    j = j + 1
+  end
+
+  -- Potentially one of t1/t2 hasn't been completely appended if they aren't of the same length
+  while i <= #t1 do
+    table.insert(interleafed, t1[i])
+    i = i + 1
+  end
+  while j <= #t2 do
+    table.insert(interleafed, t2[j])
+    j = j + 1
+  end
+
+  return interleafed
+end
 
 --------------------------------------------------------------------------------
 -- CONVERT NON-INTEGER INDEXED TABLE TO INTEGER IN ORDER TO SAVE TO CSV

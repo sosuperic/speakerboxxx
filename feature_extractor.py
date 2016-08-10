@@ -1,13 +1,13 @@
 # Extract input linguistic features and output acoustic features from CMU Arctic data
 
-WAVS_PATH = 'data/cmu_us_slt_arctic/wav/'
-PHONE_LABELS_PATH = 'data/cmu_us_slt_arctic/lab/'
+WAVS_PATH = 'data/cmu_us_clb_arctic/wav/'
+PHONE_LABELS_PATH = 'data/cmu_us_clb_arctic/lab/'
 TRANSCRIPTS_PATH = 'data/cmuarctic.data.txt'
 
-# LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs'
-LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus'
-ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/acoustic_targets'
-DURATION_TARGETS_PATH = 'data/processed/cmu_us_slt_arctic/duration_targets'
+# LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_clb_arctic/linguistic_inputs'
+LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_clb_arctic/linguistic_inputs_plus'
+ACOUSTIC_TARGETS_PATH = 'data/processed/cmu_us_clb_arctic/acoustic_targets'
+DURATION_TARGETS_PATH = 'data/processed/cmu_us_clb_arctic/duration_targets'
 
 import os
 import pprint

@@ -12,11 +12,12 @@ using HDF5
 # using Images
 
 # SPECTRAL_PARAMS_PATH = "outputs/spectral/acoustic_only"
-SPECTRAL_PARAMS_PATH = "outputs/spectral/full_pipeline"
-OUTPUTS_WAV_PATH = "outputs/wav"
+# SPECTRAL_PARAMS_PATH = "outputs/spectral/full_pipeline"
+SPECTRAL_PARAMS_PATH = "outputs_two_datasets/spectral/full_pipeline"
+OUTPUTS_WAV_PATH = "outputs_two_datasets/wav"
 
-mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "mean.h5"), "data")               # (time, features (84))
-stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "stddev.h5"), "data")
+# mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "mean.h5"), "data")               # (time, features (84))
+# stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "stddev.h5"), "data")
 
 function generate_and_save_wav(rec_fn, i)
     # rec_fn = "arctic_a0120.h5"
@@ -41,11 +42,11 @@ function generate_and_save_wav(rec_fn, i)
     f0 = 10.^(log_f0 - 1e-10)               # (381,)        NOTE the eps
     
     # Silence if voiced flag is 1
-    for i=1:size(voiced)[1]
-        if voiced[i] < 0.25
-            f0[i] = 0.0
-        end
-    end
+    # for i=1:size(voiced)[1]
+    #     if voiced[i] < 0.25
+    #         f0[i] = 0.0
+    #     end
+    # end
 
     sp_mc = data[1:end, 3:3+(41-1)]         # (381, 41)
     ap_mc = data[1:end, 3+41:end]           # (381, 41)
