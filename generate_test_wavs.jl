@@ -12,17 +12,21 @@ using HDF5
 # using Images
 
 # SPECTRAL_PARAMS_PATH = "outputs/spectral/acoustic_only"
-# SPECTRAL_PARAMS_PATH = "outputs/spectral/full_pipeline"
-SPECTRAL_PARAMS_PATH = "outputs_two_datasets/spectral/full_pipeline"
-OUTPUTS_WAV_PATH = "outputs_two_datasets/wav"
+SPECTRAL_PARAMS_PATH = "outputs/spectral/full_pipeline_f0interpolate_normalized"
+# SPECTRAL_PARAMS_PATH = "outputs_two_datasets/spectral/full_pipeline"
+OUTPUTS_WAV_PATH = "outputs/wav"
+# OUTPUTS_WAV_PATH = "outputs_two_datasets/wav"
 
-# mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "mean.h5"), "data")               # (time, features (84))
-# stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/", "stddev.h5"), "data")
+NORMALIZED = true
+SILENCE_IF_NOTVOICED = false
+
+mean = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate_normalized/", "mean.h5"), "data")               # (time, features (84))
+stddev = h5read(joinpath("data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate_normalized/", "stddev.h5"), "data")
 
 function generate_and_save_wav(rec_fn, i)
     # rec_fn = "arctic_a0120.h5"
     println(i)
-    if i == 1 || i == 2 || i == 4 || i == 5 || i == 74
+    if i == 1 || i == 74
         return
     end
     rec = splitext(rec_fn)[1]
@@ -32,21 +36,25 @@ function generate_and_save_wav(rec_fn, i)
     data = transpose(data)                  # (time, features (84))
 
     # Restore mean stddev
-    # for i=2:size(data)[2]                  # features
-    #     data[1:end, i] *= stddev[i-1]
-    #     data[1:end, i] += mean[i-1]
-    # end
+    if NORMALIZED
+        for i=2:size(data)[2]                  # features
+            data[1:end, i] *= stddev[i-1]
+            data[1:end, i] += mean[i-1]
+        end
+    end
 
     voiced = data[1:end,1]
     log_f0  = data[1:end,2]
     f0 = 10.^(log_f0 - 1e-10)               # (381,)        NOTE the eps
     
     # Silence if voiced flag is 1
-    # for i=1:size(voiced)[1]
-    #     if voiced[i] < 0.25
-    #         f0[i] = 0.0
-    #     end
-    # end
+    if SILENCE_IF_NOTVOICED
+        for i=1:size(voiced)[1]
+            if voiced[i] < 0.25
+                f0[i] = 0.0
+            end
+        end
+    end
 
     sp_mc = data[1:end, 3:3+(41-1)]         # (381, 41)
     ap_mc = data[1:end, 3+41:end]           # (381, 41)

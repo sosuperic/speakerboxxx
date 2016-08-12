@@ -4,16 +4,17 @@ using WAV
 using WORLD
 using HDF5
 
-WAV_PATH = "data/cmu_us_clb_arctic/wav/"
-PHONEME_LABELS_PATH = "data/cmu_us_clb_arctic/lab/"
+WAV_PATH = "data/cmu_us_slt_arctic/wav/"
+PHONEME_LABELS_PATH = "data/cmu_us_slt_arctic/lab/"
 # LINGUISTIC_INPUTS_PATH = "data/processed/cmu_us_clb_arctic/linguistic_inputs/"
-LINGUISTIC_INPUTS_PATH = "data/processed/cmu_us_clb_arctic/linguistic_inputs_plus/"
-ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_clb_arctic/acoustic_targets_f0interpolate/"
+LINGUISTIC_INPUTS_PATH = "data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/"
+# ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_clb_arctic/acoustic_targets_f0interpolate/"
+ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate_normalized/"
 # ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean"
 # ACOUSTIC_TARGETS_PATH = "data/processed/cmu_us_slt_arctic/acoustic_targets_normalized"
 FRAME_EVERY_MS = 5.0 		# extract frame every 5 ms
 
-NORMALIZE = false			# zero-mean, unit-variance.
+NORMALIZE = true			# zero-mean, unit-variance.
 UTT_DUR_IDX = 253			# Index in linguistic input that stores length in seconds of utterance
 
 function calc_acoustic_features(rec)
