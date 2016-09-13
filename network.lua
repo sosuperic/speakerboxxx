@@ -11,7 +11,7 @@ local Network = {}
 
 function Network:init(opt)
     self.tnt = require 'torchnet'
-    self:setup_gpu(opt)
+    self:setup_gpu(opt) 
     if opt.mode == 'train' then
         self:setup_model(opt)
         self:setup_train_engine(opt)
@@ -42,8 +42,8 @@ function Network:setup_model(opt)
         self.nets = {net}
         self.criterions = {criterion}
         self.model = 'duration'
-        self.train_iterator = self:get_iterator(opt.batchsize, 'duration', split, opt.two_datasets)
-        self.valid_iterator = self:get_iterator(opt.batchsize, 'duration', 'valid', opt.two_datasets)
+        self.train_iterator = self:get_iterator(opt.batchsize, 'duration', opt.dataset, split, opt.two_datasets)
+        self.valid_iterator = self:get_iterator(opt.batchsize, 'duration', opt.dataset, 'valid', opt.two_datasets)
 
         -- for sample in self.train_iterator() do
         --     print(sample)
@@ -54,8 +54,8 @@ function Network:setup_model(opt)
         self.nets = {net}
         self.criterions = {criterion}
         self.model = 'acoustic'
-        self.train_iterator = self:get_iterator(opt.batchsize, 'acoustic', split, opt.two_datasets)
-        self.valid_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'valid', opt.two_datasets)
+        self.train_iterator = self:get_iterator(opt.batchsize, 'acoustic', opt.dataset, split, opt.two_datasets)
+        self.valid_iterator = self:get_iterator(opt.batchsize, 'acoustic', opt.dataset, 'valid', opt.two_datasets)
 
         -- for sample in self.train_iterator() do
         --     print(sample)
@@ -219,7 +219,7 @@ function Network:test_duration_loss(opt)
     print('Testing duration model')
     self.engine:test{
         network = self.duration_model,
-        iterator = self:get_iterator(opt.batchsize, 'duration', 'test', opt.two_datasets),
+        iterator = self:get_iterator(opt.batchsize, 'duration', opt.dataset, 'test', opt.two_datasets),
         criterion = self.duration_criterion
     }
 end
@@ -228,14 +228,14 @@ function Network:test_acoustic_loss(opt)
     print('Testing acoustic model')
     self.engine:test{
         network = self.acoustic_model,
-        iterator = self:get_iterator(opt.batchsize, 'acoustic', 'test', opt.two_datasets),
+        iterator = self:get_iterator(opt.batchsize, 'acoustic', opt.dataset, 'test', opt.two_datasets),
         criterion = self.acoustic_criterion
     }
 end
 
 function Network:test_acoustic_params(opt)
     print('Generating spectral params using only acoustic model')
-    self.acoustic_iterator = self:get_iterator(opt.batchsize, 'acoustic', 'test', false)
+    self.acoustic_iterator = self:get_iterator(opt.batchsize, 'acoustic', opt.dataset, 'test', false)
     for sample in self.acoustic_iterator() do
         if opt.gpuid >= 0 then
             sample.input = sample.input:cuda()
@@ -252,7 +252,7 @@ function Network:test_acoustic_params(opt)
 end
 
 function Network:test_full_pipeline(opt)
-    self.duration_iterator = self:get_iterator(opt.batchsize, 'duration', 'test', false)
+    self.duration_iterator = self:get_iterator(opt.batchsize, 'duration', opt.dataset, 'test', false)
     print('Testing full pipeline - duration plus acoustic')
     -- Use outputs of duration model to create inputs for acoustic model
     -- Save outputs of acoustic model in order to generate wav files
@@ -367,7 +367,7 @@ function Network:move_to_gpu(opt)
     end
 end
 
-function Network:get_iterator(batchsize, model, split, two_datasets)
+function Network:get_iterator(batchsize, model, dataset_arg, split, two_datasets)
     return self.tnt.ParallelDatasetIterator{
         nthread = 1,
         closure = function()
@@ -378,9 +378,9 @@ function Network:get_iterator(batchsize, model, split, two_datasets)
             require 'dataset'
             local dataset
             if model == 'duration' then
-                dataset = tnt.DurationDataset(split, two_datasets)
+                dataset = tnt.DurationDataset(dataset_arg, split, two_datasets)
             elseif model == 'acoustic' then
-                dataset = tnt.AcousticDataset(split, two_datasets)
+                dataset = tnt.AcousticDataset(dataset_arg, split, two_datasets)
             end
 
             return tnt.BatchDataset{
@@ -399,6 +399,7 @@ function Network:get_iterator(batchsize, model, split, two_datasets)
             -- print('transform', sample)
             -- os.exit()
             local max_seq_len = 0
+            -- print(sample)
             for i=1,#sample.target do
                 if sample.input[i]:size(1) > max_seq_len then
                     max_seq_len = sample.input[i]:size(1)

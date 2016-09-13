@@ -1,27 +1,41 @@
 -- Implement dataset interface for torchnet
--- Load pre-processed split and sort by sequence length
+-- Load pre-processed split
 
 require 'utils.lua_utils'
 require 'hdf5'
 require 'pl'
 local tnt = require 'torchnet'
 
-local SPLIT_PATH = 'data/processed/'
--- local LINGUISTIC_INPUTS_PATH = 'data/processed/cmu_us_slt_arctic/linguistic_inputs/'
-local LINGUISTIC_INPUTS_PATH1 = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/'
--- local LINGUISTIC_INPUTS_PATH2 = 'data/processed/cmu_us_clb_arctic/linguistic_inputs_plus/'
+------------------------------------------------------------------------------------------------------------
+-- Datasets, Parameters, Paths
+------------------------------------------------------------------------------------------------------------
+-- CMUArctic, 2 datasets of CMUArctic
+local PATHS = {}
+
+PATHS['cmuarctic'] = {}
+PATHS['cmuarctic']['SPLIT_PATH1'] = 'data/processed/cmu_us_slt_arctic/'
+PATHS['cmuarctic']['SPLIT_PATH2'] = 'data/processed/cmu_us_clb_arctic/'
+PATHS['cmuarctic']['LINGUISTIC_INPUTS_PATH1'] = 'data/processed/cmu_us_slt_arctic/linguistic_inputs_plus/'
+PATHS['cmuarctic']['LINGUISTIC_INPUTS_PATH2'] = 'data/processed/cmu_us_clb_arctic/linguistic_inputs_plus/'
+PATHS['cmuarctic']['ACOUSTIC_TARGETS_PATH1'] = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate/'
+PATHS['cmuarctic']['ACOUSTIC_TARGETS_PATH2'] = 'data/processed/cmu_us_clb_arctic/acoustic_targets_f0interpolate/'
+PATHS['cmuarctic']['DURATION_TARGETS_PATH1'] = 'data/processed/cmu_us_slt_arctic/duration_targets/'
+PATHS['cmuarctic']['DURATION_TARGETS_PATH2'] = 'data/processed/cmu_us_clb_arctic/duration_targets/'
+-- Still experimental / old
 -- local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets_normalized/'
 -- local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets_zeromean/'
 -- local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets/'
--- local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate/'
-local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate_normalized/'
--- local ACOUSTIC_TARGETS_PATH2 = 'data/processed/cmu_us_clb_arctic/acoustic_targets_f0interpolate/'
-local DURATION_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/duration_targets/'
--- local DURATION_TARGETS_PATH2 = 'data/processed/cmu_us_clb_arctic/duration_targets/'
+-- local ACOUSTIC_TARGETS_PATH1 = 'data/processed/cmu_us_slt_arctic/acoustic_targets_f0interpolate_normalized/'
 
+-- Note: blizzard2013 doesn't have two datasets. Only split_path1, etc. is set
+PATHS['blizzard2013'] = {}
+PATHS['blizzard2013']['SPLIT_PATH1'] = 'data/processed/blizzard2013/'
+PATHS['blizzard2013']['LINGUISTIC_INPUTS_PATH1'] = 'data/processed/blizzard2013/linguistic_inputs/'
+PATHS['blizzard2013']['ACOUSTIC_TARGETS_PATH1'] = 'data/processed/blizzard2013/acoustic_targets/'
+PATHS['blizzard2013']['DURATION_TARGETS_PATH1'] = 'data/processed/blizzard2013/duration_targets/'
 
 ----------------------------------------------------------------------------------------------------------------
--- Helper Functions
+-- Helper functions
 ----------------------------------------------------------------------------------------------------------------
 local function create_full_path(base, table_of_recs)
 	local fps = {}
@@ -34,6 +48,7 @@ end
 local function load_hdf5_array(path, name)
 	local file = hdf5.open(path, 'r')
 	local data = file:read(name):all()
+	file:close()
 	return data
 end
 
@@ -42,16 +57,17 @@ end
 ----------------------------------------------------------------------------------------------------------------
 local DurationDataset, Dataset = torch.class('tnt.DurationDataset', 'tnt.Dataset', tnt)
 
-function DurationDataset:__init(split, two_datasets)
-	self.recs = lines_from(path.join(SPLIT_PATH, 'duration', split .. '.txt'))
-	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH1, self.recs)
-	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH1, self.recs)
+function DurationDataset:__init(dataset, split, two_datasets)
+	self.recs1 = lines_from(path.join(PATHS[dataset]['SPLIT_PATH1'], 'duration_split', split .. '.txt'))
+	self.linguistic_input_fps = create_full_path(PATHS[dataset]['LINGUISTIC_INPUTS_PATH1'], self.recs1)
+	self.duration_target_fps = create_full_path(PATHS[dataset]['DURATION_TARGETS_PATH1'], self.recs1)
 
 	if two_datasets then
+		self.recs2 = lines_from(path.join(PATHS[dataset]['SPLIT_PATH2'], 'duration_split', split .. '.txt'))
 		self.linguistic_input_fps = interleaf_tables(self.linguistic_input_fps,
-			create_full_path(LINGUISTIC_INPUTS_PATH2, self.recs))
+			create_full_path(PATHS[dataset]['LINGUISTIC_INPUTS_PATH2'], self.recs2))
 		self.duration_target_fps = interleaf_tables(self.duration_target_fps,
-			create_full_path(DURATION_TARGETS_PATH2, self.recs))
+			create_full_path(PATHS[dataset]['DURATION_TARGETS_PATH2'], self.recs2))
 	end
 
 	self.n = #self.linguistic_input_fps
@@ -75,20 +91,20 @@ end
 ----------------------------------------------------------------------------------------------------------------
 local AcousticDataset, Dataset = torch.class('tnt.AcousticDataset', 'tnt.Dataset', tnt)
 
-function AcousticDataset:__init(split, two_datasets)
-	self.recs = lines_from(path.join(SPLIT_PATH, 'acoustic', split .. '.txt'))
-
-	self.linguistic_input_fps = create_full_path(LINGUISTIC_INPUTS_PATH1, self.recs)
-	self.acoustic_target_fps = create_full_path(ACOUSTIC_TARGETS_PATH1, self.recs)
-	self.duration_target_fps = create_full_path(DURATION_TARGETS_PATH1, self.recs)
+function AcousticDataset:__init(dataset, split, two_datasets)
+	self.recs1 = lines_from(path.join(PATHS[dataset]['SPLIT_PATH1'], 'acoustic_split', split .. '.txt'))
+	self.linguistic_input_fps = create_full_path(PATHS[dataset]['LINGUISTIC_INPUTS_PATH1'], self.recs1)
+	self.acoustic_target_fps = create_full_path(PATHS[dataset]['ACOUSTIC_TARGETS_PATH1'], self.recs1)
+	self.duration_target_fps = create_full_path(PATHS[dataset]['DURATION_TARGETS_PATH1'], self.recs1)
 
 	if two_datasets then
+		self.recs2 = lines_from(path.join(PATHS[dataset]['SPLIT_PATH2'], 'acoustic_split', split .. '.txt'))
 		self.linguistic_input_fps = interleaf_tables(self.linguistic_input_fps,
-			create_full_path(LINGUISTIC_INPUTS_PATH2, self.recs))
+			create_full_path(PATHS[dataset]['LINGUISTIC_INPUTS_PATH1'], self.recs2))
 		self.acoustic_target_fps = interleaf_tables(self.acoustic_target_fps,
-			create_full_path(ACOUSTIC_TARGETS_PATH2, self.recs))
+			create_full_path(PATHS[dataset]['ACOUSTIC_TARGETS_PATH1'], self.recs2))
 		self.duration_target_fps = interleaf_tables(self.duration_target_fps,
-			create_full_path(DURATION_TARGETS_PATH2, self.recs))
+			create_full_path(PATHS[dataset]['DURATION_TARGETS_PATH1'], self.recs2))
 	end
 
 	self.n = #self.linguistic_input_fps
@@ -118,8 +134,13 @@ function AcousticDataset:get(idx)
 		local dur_plus_minus = dur + plus_minus
 		local n
 		-- local tmp_old_plus_minus = plus_minus
-		if i == x:size(1) then  -- Last phoneme. Fill up.
-			n = total_nframes - table.reduce(phoneme_nframes, function(a,b) return a+b end)
+		if i == x:size(1) then  -- last phoneme. Fill up.
+			if i == 1 then 		-- only one phoneme
+				table.insert(phoneme_nframes, total_nframes)
+				break
+			else
+				n = total_nframes - table.reduce(phoneme_nframes, function(a,b) return a+b end)
+			end
 		else
 			n = round(dur_plus_minus)
 			plus_minus = dur_plus_minus - n

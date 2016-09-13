@@ -11,6 +11,9 @@ using HDF5
 
 # using Images
 
+# TODO have this take a command line argument 
+# SPECTRAL_PARAMS_PATH = outputs/{dataset}
+
 # SPECTRAL_PARAMS_PATH = "outputs/spectral/acoustic_only"
 SPECTRAL_PARAMS_PATH = "outputs/spectral/full_pipeline_f0interpolate_normalized"
 # SPECTRAL_PARAMS_PATH = "outputs_two_datasets/spectral/full_pipeline"

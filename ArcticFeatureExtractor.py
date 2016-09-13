@@ -21,7 +21,7 @@ import pyworld as pw
 import numpy as np
 from scipy.io.wavfile import read
 
-class FeatureExtractor:
+class ArcticFeatureExtractor:
     def __init__(self):
         self.cmudict = nltk.corpus.cmudict.dict()
         self.tagdict = nltk.data.load('help/tagsets/upenn_tagset.pickle')
@@ -618,6 +618,6 @@ class FeatureExtractor:
         f.close()
 
 if __name__ == '__main__':
-    fe = FeatureExtractor()
-    # pprint.pprint(fe.rec_phone_contexts)
-    # pprint.pprint(fe.rec_phone_durations)
+    afe = ArcticFeatureExtractor()
+    # pprint.pprint(afe.rec_phone_contexts)
+    # pprint.pprint(afe.rec_phone_durations)
