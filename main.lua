@@ -12,6 +12,7 @@ cmd:text('th main.lua  -gpuid 0 -model duration -notes linear254to256_linear256t
 cmd:text('$ th main.lua  -gpuid 1 -maxepochs 300 -save_model_every_epoch 10 -lr 0.0005 -method adam -model acoustic -notes linear254to512_linear512to512_lstm512to256_lstm256to256_linear256to84__QUINPHONE_f0INTERPOLATE')
 cmd:text('$ th main.lua -gpuid 0 -mode test -load_duration_model_path models/cmuarctic/duration/2016_8_3___15_5_38/net_e100.t7 -load_acoustic_model_path models/cmuarctic/acoustic/2016_8_3___17_24_13/net_e270.t7')
 cmd:text('$ th main.lua -mode test -load_duration_model_path models/cmuarctic/duration/2016_7_20___5_16_19/net_e9.t7 -load_acoustic_model_path models/cmuarctic/acoustic/2016_7_20___14_30_32/net_e1.t7')
+cmd:text('$ th main.lua -gpuid 2 -dataset blizzard2013 -mode test -load_duration_model_path models/blizzard2013/duration/2016_9_13___17_11_42/net_e1000.t7 -load_acoustic_model_path models/blizzard2013/acoustic/2016_9_13___19_19_51/net_e100.t7')
 cmd:text('Options:')
 -- Training, Testing
 cmd:option('-model', '', 'duration or acoustic')

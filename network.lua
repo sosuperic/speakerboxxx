@@ -158,6 +158,7 @@ end
 function Network:save_network(fn)
     local fp = path.join(self.save_path, fn)
     print(string.format('Saving model to: %s', fp))
+    self.nets[1]:clearState()
     torch.save(fp, self.nets[1])
 end
 
@@ -387,11 +388,13 @@ function Network:get_iterator(batchsize, model, dataset_arg, split, two_datasets
                 batchsize = batchsize,
                 dataset = dataset,
                 -- merge = function(array_of_tensors)
-                --     -- print(array_of_tensors)
-                --     -- print(array_of_tensors[1])
+                --     print(array_of_tensors)
+                --     print(array_of_tensors['input'][1])
+                --     print(array_of_tensors['target'])
+                --     print(array_of_tensors['rec'])
                 --     -- print(#array_of_tensors)
-                --     -- os.exit()
-                --     return array_of_teensors
+                --     os.exit()
+                --     return array_of_tensors
                 -- end,
             }
         end,
